@@ -1,0 +1,29 @@
+.test-postgres/
+.migration-backup/
+backend/.env
+backend/tmp/
+backend/coverage.out
+backend/*.exe
+
+# Dependencies and generated build output
+node_modules/
+dist/
+target/
+coverage/
+*.tsbuildinfo
+*.log
+
+# Local configuration, credentials and backups
+.env
+.env.*
+!.env.example
+!.env.*.example
+*.pem
+*.key
+*.p12
+*.pfx
+*.backup.*
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
