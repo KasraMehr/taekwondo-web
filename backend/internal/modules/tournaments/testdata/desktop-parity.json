@@ -1,0 +1,712 @@
+{
+  "weights": [
+    {
+      "category": "-58",
+      "weight": 54,
+      "ok": false,
+      "tolerance": false
+    },
+    {
+      "category": "-58",
+      "weight": 54.001,
+      "ok": true,
+      "tolerance": false
+    },
+    {
+      "category": "-58",
+      "weight": 58,
+      "ok": true,
+      "tolerance": false
+    },
+    {
+      "category": "-58",
+      "weight": 58.2,
+      "ok": true,
+      "tolerance": true
+    },
+    {
+      "category": "-58",
+      "weight": 58.201,
+      "ok": false,
+      "tolerance": false
+    },
+    {
+      "category": "+87",
+      "weight": 87,
+      "ok": false,
+      "tolerance": false
+    },
+    {
+      "category": "+87",
+      "weight": 87.001,
+      "ok": true,
+      "tolerance": false
+    }
+  ],
+  "brackets": [
+    {
+      "count": 2,
+      "matches": [
+        {
+          "a": "1",
+          "b": "2",
+          "winner": null,
+          "round": 1,
+          "side": "final",
+          "bye": false,
+          "index": 0,
+          "next": -1,
+          "slot": null
+        }
+      ]
+    },
+    {
+      "count": 3,
+      "matches": [
+        {
+          "a": "1",
+          "b": null,
+          "winner": "1",
+          "round": 1,
+          "side": "left",
+          "bye": true,
+          "index": 0,
+          "next": 2,
+          "slot": "athlete1"
+        },
+        {
+          "a": "3",
+          "b": "2",
+          "winner": null,
+          "round": 1,
+          "side": "right",
+          "bye": false,
+          "index": 1,
+          "next": 2,
+          "slot": "athlete2"
+        },
+        {
+          "a": "1",
+          "b": null,
+          "winner": null,
+          "round": 2,
+          "side": "final",
+          "bye": false,
+          "index": 0,
+          "next": -1,
+          "slot": null
+        }
+      ]
+    },
+    {
+      "count": 5,
+      "matches": [
+        {
+          "a": "1",
+          "b": null,
+          "winner": "1",
+          "round": 1,
+          "side": "left",
+          "bye": true,
+          "index": 0,
+          "next": 4,
+          "slot": "athlete1"
+        },
+        {
+          "a": "5",
+          "b": "4",
+          "winner": null,
+          "round": 1,
+          "side": "left",
+          "bye": false,
+          "index": 1,
+          "next": 4,
+          "slot": "athlete2"
+        },
+        {
+          "a": "3",
+          "b": null,
+          "winner": "3",
+          "round": 1,
+          "side": "right",
+          "bye": true,
+          "index": 2,
+          "next": 5,
+          "slot": "athlete1"
+        },
+        {
+          "a": null,
+          "b": "2",
+          "winner": "2",
+          "round": 1,
+          "side": "right",
+          "bye": true,
+          "index": 3,
+          "next": 5,
+          "slot": "athlete2"
+        },
+        {
+          "a": "1",
+          "b": null,
+          "winner": null,
+          "round": 2,
+          "side": "left",
+          "bye": false,
+          "index": 0,
+          "next": 6,
+          "slot": "athlete1"
+        },
+        {
+          "a": "3",
+          "b": "2",
+          "winner": null,
+          "round": 2,
+          "side": "right",
+          "bye": false,
+          "index": 1,
+          "next": 6,
+          "slot": "athlete2"
+        },
+        {
+          "a": null,
+          "b": null,
+          "winner": null,
+          "round": 3,
+          "side": "final",
+          "bye": false,
+          "index": 0,
+          "next": -1,
+          "slot": null
+        }
+      ]
+    },
+    {
+      "count": 8,
+      "matches": [
+        {
+          "a": "1",
+          "b": "8",
+          "winner": null,
+          "round": 1,
+          "side": "left",
+          "bye": false,
+          "index": 0,
+          "next": 4,
+          "slot": "athlete1"
+        },
+        {
+          "a": "5",
+          "b": "4",
+          "winner": null,
+          "round": 1,
+          "side": "left",
+          "bye": false,
+          "index": 1,
+          "next": 4,
+          "slot": "athlete2"
+        },
+        {
+          "a": "3",
+          "b": "6",
+          "winner": null,
+          "round": 1,
+          "side": "right",
+          "bye": false,
+          "index": 2,
+          "next": 5,
+          "slot": "athlete1"
+        },
+        {
+          "a": "7",
+          "b": "2",
+          "winner": null,
+          "round": 1,
+          "side": "right",
+          "bye": false,
+          "index": 3,
+          "next": 5,
+          "slot": "athlete2"
+        },
+        {
+          "a": null,
+          "b": null,
+          "winner": null,
+          "round": 2,
+          "side": "left",
+          "bye": false,
+          "index": 0,
+          "next": 6,
+          "slot": "athlete1"
+        },
+        {
+          "a": null,
+          "b": null,
+          "winner": null,
+          "round": 2,
+          "side": "right",
+          "bye": false,
+          "index": 1,
+          "next": 6,
+          "slot": "athlete2"
+        },
+        {
+          "a": null,
+          "b": null,
+          "winner": null,
+          "round": 3,
+          "side": "final",
+          "bye": false,
+          "index": 0,
+          "next": -1,
+          "slot": null
+        }
+      ]
+    },
+    {
+      "count": 16,
+      "matches": [
+        {
+          "a": "1",
+          "b": "16",
+          "winner": null,
+          "round": 1,
+          "side": "left",
+          "bye": false,
+          "index": 0,
+          "next": 8,
+          "slot": "athlete1"
+        },
+        {
+          "a": "9",
+          "b": "8",
+          "winner": null,
+          "round": 1,
+          "side": "left",
+          "bye": false,
+          "index": 1,
+          "next": 8,
+          "slot": "athlete2"
+        },
+        {
+          "a": "5",
+          "b": "12",
+          "winner": null,
+          "round": 1,
+          "side": "left",
+          "bye": false,
+          "index": 2,
+          "next": 9,
+          "slot": "athlete1"
+        },
+        {
+          "a": "13",
+          "b": "4",
+          "winner": null,
+          "round": 1,
+          "side": "left",
+          "bye": false,
+          "index": 3,
+          "next": 9,
+          "slot": "athlete2"
+        },
+        {
+          "a": "3",
+          "b": "14",
+          "winner": null,
+          "round": 1,
+          "side": "right",
+          "bye": false,
+          "index": 4,
+          "next": 10,
+          "slot": "athlete1"
+        },
+        {
+          "a": "11",
+          "b": "6",
+          "winner": null,
+          "round": 1,
+          "side": "right",
+          "bye": false,
+          "index": 5,
+          "next": 10,
+          "slot": "athlete2"
+        },
+        {
+          "a": "7",
+          "b": "10",
+          "winner": null,
+          "round": 1,
+          "side": "right",
+          "bye": false,
+          "index": 6,
+          "next": 11,
+          "slot": "athlete1"
+        },
+        {
+          "a": "15",
+          "b": "2",
+          "winner": null,
+          "round": 1,
+          "side": "right",
+          "bye": false,
+          "index": 7,
+          "next": 11,
+          "slot": "athlete2"
+        },
+        {
+          "a": null,
+          "b": null,
+          "winner": null,
+          "round": 2,
+          "side": "left",
+          "bye": false,
+          "index": 0,
+          "next": 12,
+          "slot": "athlete1"
+        },
+        {
+          "a": null,
+          "b": null,
+          "winner": null,
+          "round": 2,
+          "side": "left",
+          "bye": false,
+          "index": 1,
+          "next": 12,
+          "slot": "athlete2"
+        },
+        {
+          "a": null,
+          "b": null,
+          "winner": null,
+          "round": 2,
+          "side": "right",
+          "bye": false,
+          "index": 2,
+          "next": 13,
+          "slot": "athlete1"
+        },
+        {
+          "a": null,
+          "b": null,
+          "winner": null,
+          "round": 2,
+          "side": "right",
+          "bye": false,
+          "index": 3,
+          "next": 13,
+          "slot": "athlete2"
+        },
+        {
+          "a": null,
+          "b": null,
+          "winner": null,
+          "round": 3,
+          "side": "left",
+          "bye": false,
+          "index": 0,
+          "next": 14,
+          "slot": "athlete1"
+        },
+        {
+          "a": null,
+          "b": null,
+          "winner": null,
+          "round": 3,
+          "side": "right",
+          "bye": false,
+          "index": 1,
+          "next": 14,
+          "slot": "athlete2"
+        },
+        {
+          "a": null,
+          "b": null,
+          "winner": null,
+          "round": 4,
+          "side": "final",
+          "bye": false,
+          "index": 0,
+          "next": -1,
+          "slot": null
+        }
+      ]
+    }
+  ],
+  "rounds": [
+    {
+      "round": {
+        "number": 1,
+        "isGoldenPoint": false,
+        "blue": {
+          "punch": 0,
+          "bodyKick": 2,
+          "headKick": 0,
+          "turningBodyKick": 0,
+          "turningHeadKick": 0,
+          "gamJeom": 0,
+          "gamJeomLate": 0
+        },
+        "red": {
+          "punch": 0,
+          "bodyKick": 0,
+          "headKick": 0,
+          "turningBodyKick": 0,
+          "turningHeadKick": 0,
+          "gamJeom": 0,
+          "gamJeomLate": 0
+        },
+        "winner": null,
+        "endedBy": null
+      },
+      "outcome": {
+        "winner": "blue",
+        "endedBy": "PTF"
+      }
+    },
+    {
+      "round": {
+        "number": 1,
+        "isGoldenPoint": false,
+        "blue": {
+          "punch": 0,
+          "bodyKick": 0,
+          "headKick": 0,
+          "turningBodyKick": 0,
+          "turningHeadKick": 0,
+          "gamJeom": 0,
+          "gamJeomLate": 0
+        },
+        "red": {
+          "punch": 0,
+          "bodyKick": 0,
+          "headKick": 5,
+          "turningBodyKick": 0,
+          "turningHeadKick": 0,
+          "gamJeom": 0,
+          "gamJeomLate": 0
+        },
+        "winner": null,
+        "endedBy": null
+      },
+      "outcome": {
+        "winner": "red",
+        "endedBy": "PTG"
+      }
+    },
+    {
+      "round": {
+        "number": 1,
+        "isGoldenPoint": false,
+        "blue": {
+          "punch": 0,
+          "bodyKick": 0,
+          "headKick": 0,
+          "turningBodyKick": 0,
+          "turningHeadKick": 0,
+          "gamJeom": 5,
+          "gamJeomLate": 0
+        },
+        "red": {
+          "punch": 0,
+          "bodyKick": 0,
+          "headKick": 0,
+          "turningBodyKick": 0,
+          "turningHeadKick": 0,
+          "gamJeom": 0,
+          "gamJeomLate": 0
+        },
+        "winner": null,
+        "endedBy": null
+      },
+      "outcome": {
+        "winner": "red",
+        "endedBy": "PUN"
+      }
+    },
+    {
+      "round": {
+        "number": 1,
+        "isGoldenPoint": false,
+        "blue": {
+          "punch": 2,
+          "bodyKick": 0,
+          "headKick": 0,
+          "turningBodyKick": 0,
+          "turningHeadKick": 0,
+          "gamJeom": 0,
+          "gamJeomLate": 0
+        },
+        "red": {
+          "punch": 0,
+          "bodyKick": 1,
+          "headKick": 0,
+          "turningBodyKick": 0,
+          "turningHeadKick": 0,
+          "gamJeom": 0,
+          "gamJeomLate": 0
+        },
+        "winner": null,
+        "endedBy": null
+      },
+      "outcome": {
+        "winner": "red",
+        "endedBy": "PTF"
+      }
+    },
+    {
+      "round": {
+        "number": 1,
+        "isGoldenPoint": false,
+        "blue": {
+          "punch": 0,
+          "bodyKick": 0,
+          "headKick": 0,
+          "turningBodyKick": 0,
+          "turningHeadKick": 0,
+          "gamJeom": 0,
+          "gamJeomLate": 0
+        },
+        "red": {
+          "punch": 0,
+          "bodyKick": 0,
+          "headKick": 0,
+          "turningBodyKick": 0,
+          "turningHeadKick": 0,
+          "gamJeom": 0,
+          "gamJeomLate": 0
+        },
+        "winner": null,
+        "endedBy": null
+      },
+      "outcome": {
+        "winner": null,
+        "endedBy": "SUP"
+      }
+    }
+  ],
+  "categories": {
+    "خردسالان": {
+      "male": [
+        "-26",
+        "-28",
+        "-30",
+        "-33",
+        "-36",
+        "-40",
+        "-44",
+        "-48",
+        "-52",
+        "+52"
+      ],
+      "female": [
+        "-26",
+        "-28",
+        "-30",
+        "-33",
+        "-36",
+        "-40",
+        "-44",
+        "-48",
+        "-52",
+        "+52"
+      ]
+    },
+    "نونهالان": {
+      "male": [
+        "-33",
+        "-37",
+        "-41",
+        "-45",
+        "-49",
+        "-53",
+        "-57",
+        "-61",
+        "-65",
+        "+65"
+      ],
+      "female": [
+        "-29",
+        "-33",
+        "-37",
+        "-41",
+        "-44",
+        "-47",
+        "-51",
+        "-55",
+        "-59",
+        "+59"
+      ]
+    },
+    "نوجوانان": {
+      "male": [
+        "-45",
+        "-48",
+        "-51",
+        "-55",
+        "-59",
+        "-63",
+        "-68",
+        "-73",
+        "-78",
+        "+78"
+      ],
+      "female": [
+        "-42",
+        "-44",
+        "-46",
+        "-49",
+        "-52",
+        "-55",
+        "-59",
+        "-63",
+        "-68",
+        "+68"
+      ]
+    },
+    "امیدها": {
+      "male": [
+        "-54",
+        "-58",
+        "-63",
+        "-68",
+        "-74",
+        "-80",
+        "-87",
+        "+87"
+      ],
+      "female": [
+        "-46",
+        "-49",
+        "-53",
+        "-57",
+        "-62",
+        "-67",
+        "-73",
+        "+73"
+      ]
+    },
+    "بزرگسالان": {
+      "male": [
+        "-54",
+        "-58",
+        "-63",
+        "-68",
+        "-74",
+        "-80",
+        "-87",
+        "+87"
+      ],
+      "female": [
+        "-46",
+        "-49",
+        "-53",
+        "-57",
+        "-62",
+        "-67",
+        "-73",
+        "+73"
+      ]
+    }
+  }
+}
