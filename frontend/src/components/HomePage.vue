@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, watch } from "vue";
+import { ref, computed, watch, onUnmounted } from "vue";
 import { useTournamentStore } from "../stores/tournament";
 import { useTeamTournamentStore } from "../stores/teamTournament";
 import { useLeagueStore } from "../stores/league";
@@ -382,6 +382,10 @@ function remove(row: Row) {
 
 // ─── لیگ‌ها ───
 const showLeagueForm = ref(false);
+watch([showForm, showLeagueForm], ([tournamentOpen, leagueOpen]) => {
+  document.body.style.overflow = tournamentOpen || leagueOpen ? "hidden" : "";
+});
+onUnmounted(() => { document.body.style.overflow = ""; });
 const leagueName = ref("");
 const leagueFormat = ref<TournamentFormat>("grandPrix");
 const leagueGender = ref<Gender>("male");
@@ -456,44 +460,52 @@ const totalLeagues = computed(() => leagueStore.leagues.length);
 </script>
 
 <template>
-  <div>
-    <!-- تیتر -->
-    <div class="mb-6">
-      <h2 class="text-2xl font-bold">خانه</h2>
-      <p class="mt-1 text-sm text-slate-500">
-        {{ totalTournaments }} مسابقه ({{ totalTeamTournaments }} تیمی) و {{ totalLeagues }} لیگ
-      </p>
-    </div>
+  <div class="space-y-6">
+    <section class="relative overflow-hidden rounded-3xl bg-slate-950 px-6 py-7 text-white shadow-xl sm:px-8">
+      <div class="absolute -left-16 -top-20 h-56 w-56 rounded-full bg-blue-500/20 blur-3xl"></div>
+      <div class="absolute -bottom-24 right-1/3 h-48 w-48 rounded-full bg-rose-500/15 blur-3xl"></div>
+      <div class="relative flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
+        <div>
+          <div class="mb-3 inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs font-bold text-blue-200"><span class="h-2 w-2 rounded-full bg-emerald-400"></span>پنل مدیریت برگزاری</div>
+          <h2 class="text-2xl font-black sm:text-3xl">مرکز مسابقات تکواندو</h2>
+          <p class="mt-2 max-w-xl text-sm leading-6 text-slate-300">مسابقات، لیگ‌ها و رویدادهای در حال برگزاری را از یک صفحه مدیریت کنید.</p>
+        </div>
+        <div class="grid grid-cols-3 gap-2 sm:gap-3">
+          <div class="min-w-24 rounded-2xl border border-white/10 bg-white/[.06] px-4 py-3 text-center backdrop-blur"><div class="text-2xl font-black">{{ totalTournaments }}</div><div class="mt-1 text-[11px] text-slate-400">مسابقه</div></div>
+          <div class="min-w-24 rounded-2xl border border-white/10 bg-white/[.06] px-4 py-3 text-center backdrop-blur"><div class="text-2xl font-black text-violet-300">{{ totalTeamTournaments }}</div><div class="mt-1 text-[11px] text-slate-400">تیمی</div></div>
+          <div class="min-w-24 rounded-2xl border border-white/10 bg-white/[.06] px-4 py-3 text-center backdrop-blur"><div class="text-2xl font-black text-amber-300">{{ totalLeagues }}</div><div class="mt-1 text-[11px] text-slate-400">لیگ</div></div>
+        </div>
+      </div>
+    </section>
 
-    <!-- تب‌ها -->
-    <div class="mb-6 flex gap-2 border-b border-slate-200">
+    <div class="flex gap-1 rounded-2xl border border-slate-200 bg-white p-1.5 shadow-sm">
       <button
           @click="activeTab = 'tournaments'"
           :class="[
-          'rounded-t-lg px-5 py-2.5 font-medium transition',
+          'flex-1 rounded-xl px-5 py-3 text-sm font-bold transition',
           activeTab === 'tournaments'
-            ? 'border-b-2 border-blue-600 bg-white text-blue-600'
-            : 'text-slate-500 hover:bg-slate-100',
+            ? 'bg-slate-900 text-white shadow-md'
+            : 'text-slate-500 hover:bg-slate-100 hover:text-slate-800',
         ]"
       >
-        🥋 مسابقات
+        مسابقات
       </button>
       <button
           @click="activeTab = 'leagues'"
           :class="[
-          'rounded-t-lg px-5 py-2.5 font-medium transition',
+          'flex-1 rounded-xl px-5 py-3 text-sm font-bold transition',
           activeTab === 'leagues'
-            ? 'border-b-2 border-blue-600 bg-white text-blue-600'
-            : 'text-slate-500 hover:bg-slate-100',
+            ? 'bg-slate-900 text-white shadow-md'
+            : 'text-slate-500 hover:bg-slate-100 hover:text-slate-800',
         ]"
       >
-        🏆 لیگ‌ها
+        لیگ‌ها
       </button>
     </div>
 
     <!-- ═══════════════ تب مسابقات ═══════════════ -->
     <div v-if="activeTab === 'tournaments'">
-      <div class="mb-6 flex flex-wrap items-center justify-between gap-3">
+      <div class="mb-6 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
         <!-- فیلتر نوع -->
         <div class="flex gap-1 rounded-xl bg-slate-100 p-1">
           <button
@@ -513,19 +525,24 @@ const totalLeagues = computed(() => leagueStore.leagues.length);
 
         <button
             @click="showForm = !showForm"
-            class="rounded-xl bg-blue-600 px-5 py-2.5 font-medium text-white shadow transition hover:bg-blue-700"
+            class="rounded-xl bg-slate-900 px-5 py-2.5 text-sm font-bold text-white shadow transition hover:bg-blue-700"
         >
           + مسابقه جدید
         </button>
       </div>
 
       <!-- فرم ایجاد مسابقه -->
-      <div v-if="showForm" class="mb-8 rounded-2xl border border-blue-200 bg-white p-6 shadow-sm">
-        <h3 class="mb-4 text-lg font-bold">ایجاد مسابقه جدید</h3>
+      <div v-if="showForm" class="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/65 p-3 backdrop-blur-sm sm:p-6" @click.self="resetForm">
+       <div class="create-modal-panel max-h-[92vh] w-full max-w-3xl overflow-y-auto rounded-3xl border border-white/60 bg-slate-50 shadow-2xl">
+        <div class="sticky top-0 z-10 flex items-center justify-between border-b border-slate-200 bg-white/95 px-5 py-4 backdrop-blur sm:px-7">
+          <div><div class="text-xs font-bold text-blue-600">رویداد جدید</div><h3 class="mt-0.5 text-xl font-black text-slate-900">ایجاد مسابقه</h3></div>
+          <button type="button" @click="resetForm" class="grid h-10 w-10 place-items-center rounded-xl border border-slate-200 text-xl text-slate-400 transition hover:bg-rose-50 hover:text-rose-600" aria-label="بستن">×</button>
+        </div>
+        <div class="p-5 sm:p-7">
 
         <!-- نوع مسابقه -->
-        <div class="mb-5">
-          <label class="mb-2 block text-sm font-medium text-slate-600">نوع مسابقه</label>
+        <div class="mb-6 rounded-2xl border border-slate-200 bg-white p-4">
+          <label class="mb-3 block text-sm font-bold text-slate-700">نوع مسابقه</label>
           <div class="grid gap-3 sm:grid-cols-2">
             <button
                 v-for="(label, key) in FORMAT_LABELS"
@@ -547,7 +564,7 @@ const totalLeagues = computed(() => leagueStore.leagues.length);
           </div>
         </div>
 
-        <div class="grid gap-4 sm:grid-cols-2">
+        <div class="grid gap-4 rounded-2xl border border-slate-200 bg-white p-4 sm:grid-cols-2 sm:p-5">
           <div>
             <label class="mb-1 block text-sm font-medium text-slate-600">نام مسابقه</label>
             <input
@@ -578,9 +595,6 @@ const totalLeagues = computed(() => leagueStore.leagues.length);
                 class="w-full rounded-lg border border-slate-300 px-3 py-2 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200"
             />
 
-            <p class="mt-1 textlate-400late-400">
-              فرمت: سال/ماه/روز — مثال: ۱۴۰۵/۰۶/۱۵
-            </p>
             <p class="mt-1 text-xs text-slate-400">فرمت: YYYY/MM/DD — مثال: 1405/06/15</p>
           </div>
           <div>
@@ -624,20 +638,22 @@ const totalLeagues = computed(() => leagueStore.leagues.length);
         </label>
 
         <p v-if="error" class="mt-3 text-sm text-red-600">{{ error }}</p>
-        <div class="mt-4 flex gap-3">
+        <div class="mt-6 flex flex-col-reverse gap-3 border-t border-slate-200 pt-5 sm:flex-row sm:justify-end">
           <button
               @click="submit"
-              class="rounded-lg bg-green-600 px-5 py-2 font-medium text-white transition hover:bg-green-700"
+              class="rounded-xl bg-blue-600 px-7 py-2.5 font-bold text-white shadow transition hover:bg-blue-700"
           >
             ایجاد و ورود
           </button>
           <button
               @click="resetForm"
-              class="rounded-lg bg-slate-200 px-5 py-2 text-slate-700 transition hover:bg-slate-300"
+              class="rounded-xl border border-slate-300 bg-white px-6 py-2.5 font-medium text-slate-700 transition hover:bg-slate-100"
           >
             انصراف
           </button>
         </div>
+        </div>
+       </div>
       </div>
 
       <!-- حالت خالی: هیچ مسابقه‌ای وجود ندارد -->
@@ -663,14 +679,15 @@ const totalLeagues = computed(() => leagueStore.leagues.length);
       </div>
 
       <!-- لیست مسابقات -->
-      <div v-else class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+      <div v-else class="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
         <div
             v-for="row in filteredRows"
             :key="row.key"
-            class="group relative rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition hover:border-blue-300 hover:shadow-md"
+            class="group relative overflow-hidden rounded-3xl border border-slate-200 bg-white p-5 shadow-sm transition duration-300 hover:-translate-y-1 hover:border-blue-300 hover:shadow-xl"
         >
+          <div class="absolute inset-x-0 top-0 h-1" :class="row.format === 'team' ? 'bg-gradient-to-l from-violet-500 to-fuchsia-400' : 'bg-gradient-to-l from-blue-600 to-cyan-400'"></div>
           <!-- برچسب‌ها — ردیف اول: نوع + لیگی/مستقل -->
-          <div class="absolute right-4 top-4 flex flex-wrap gap-1.5">
+          <div class="flex min-h-14 flex-wrap content-start gap-1.5 pt-1">
             <!-- نوع مسابقه: انفرادی یا تیمی -->
             <span
                 :class="[
@@ -706,9 +723,8 @@ const totalLeagues = computed(() => leagueStore.leagues.length);
             </span>
           </div>
 
-          <div class="mb-3 flex items-start justify-between">
-            <!-- فضای بالا برای برچسب‌های سه‌گانه -->
-            <h3 class="pr-2 pt-16 text-lg font-bold">{{ row.name }}</h3>
+          <div class="mb-4 flex items-start justify-between gap-3 border-b border-slate-100 pb-4">
+            <h3 class="min-w-0 text-lg font-black leading-7 text-slate-900">{{ row.name }}</h3>
             <button
                 @click="remove(row)"
                 class="rounded-lg p-1.5 text-slate-400 opacity-0 transition hover:bg-red-50 hover:text-red-600 group-hover:opacity-100"
@@ -718,20 +734,17 @@ const totalLeagues = computed(() => leagueStore.leagues.length);
             </button>
           </div>
 
-          <div class="space-y-1 text-sm text-slate-500">
-            <p>📅 {{ formatDate(row.date) }}</p>
-            <p>🏟️ {{ row.courts }} زمین</p>
-            <p>👥 {{ GENDER_LABELS[row.gender] }} — {{ row.ageCategory }}</p>
-            <p>
-              {{ row.format === "team" ? "🛡️" : "🥋" }}
-              {{ row.count }} {{ row.format === "team" ? "تیم" : "ورزشکار" }}
-            </p>
-            <p v-if="row.statusLabel">⚙️ {{ row.statusLabel }}</p>
+          <div class="grid grid-cols-2 gap-2 text-sm">
+            <div class="rounded-xl bg-slate-50 p-2.5"><div class="text-[10px] text-slate-400">تاریخ برگزاری</div><div class="mt-1 font-bold text-slate-700">{{ formatDate(row.date) }}</div></div>
+            <div class="rounded-xl bg-slate-50 p-2.5"><div class="text-[10px] text-slate-400">محل اجرا</div><div class="mt-1 font-bold text-slate-700">{{ row.courts }} زمین</div></div>
+            <div class="rounded-xl bg-slate-50 p-2.5"><div class="text-[10px] text-slate-400">رده مسابقه</div><div class="mt-1 truncate font-bold text-slate-700">{{ GENDER_LABELS[row.gender] }} · {{ row.ageCategory }}</div></div>
+            <div class="rounded-xl bg-slate-50 p-2.5"><div class="text-[10px] text-slate-400">شرکت‌کنندگان</div><div class="mt-1 font-bold text-slate-700">{{ row.count }} {{ row.format === "team" ? "تیم" : "ورزشکار" }}</div></div>
+            <div v-if="row.statusLabel" class="col-span-2 rounded-xl bg-amber-50 px-3 py-2 text-xs font-medium text-amber-700">{{ row.statusLabel }}</div>
           </div>
 
           <button
               @click="open(row)"
-              class="mt-4 w-full rounded-lg bg-blue-50 py-2 text-sm font-medium text-blue-700 transition hover:bg-blue-100"
+              class="mt-4 w-full rounded-xl bg-slate-900 py-2.5 text-sm font-bold text-white transition hover:bg-blue-700"
           >
             ورود به مسابقه
           </button>
@@ -741,23 +754,26 @@ const totalLeagues = computed(() => leagueStore.leagues.length);
 
     <!-- ═══════════════ تب لیگ‌ها ═══════════════ -->
     <div v-else>
-      <div class="mb-6 flex justify-end">
+      <div class="mb-6 flex items-center justify-between rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
+        <div class="px-2"><div class="text-sm font-bold text-slate-800">لیگ‌های ثبت‌شده</div><div class="mt-0.5 text-xs text-slate-400">فصل‌ها، تیم‌ها و هفته‌های مسابقات</div></div>
         <button
             @click="showLeagueForm = !showLeagueForm"
-            class="rounded-xl bg-blue-600 px-5 py-2.5 font-medium text-white shadow transition hover:bg-blue-700"
+            class="rounded-xl bg-slate-900 px-5 py-2.5 text-sm font-bold text-white shadow transition hover:bg-blue-700"
         >
           + لیگ جدید
         </button>
       </div>
 
-      <div
-          v-if="showLeagueForm"
-          class="mb-8 rounded-2xl border border-blue-200 bg-white p-6 shadow-sm"
-      >
-        <h3 class="mb-4 text-lg font-bold">ایجاد لیگ جدید</h3>
+      <div v-if="showLeagueForm" class="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/65 p-3 backdrop-blur-sm sm:p-6" @click.self="resetLeagueForm">
+       <div class="create-modal-panel max-h-[92vh] w-full max-w-3xl overflow-y-auto rounded-3xl border border-white/60 bg-slate-50 shadow-2xl">
+        <div class="sticky top-0 z-10 flex items-center justify-between border-b border-slate-200 bg-white/95 px-5 py-4 backdrop-blur sm:px-7">
+          <div><div class="text-xs font-bold text-amber-600">فصل جدید</div><h3 class="mt-0.5 text-xl font-black text-slate-900">ایجاد لیگ</h3></div>
+          <button type="button" @click="resetLeagueForm" class="grid h-10 w-10 place-items-center rounded-xl border border-slate-200 text-xl text-slate-400 transition hover:bg-rose-50 hover:text-rose-600" aria-label="بستن">×</button>
+        </div>
+        <div class="p-5 sm:p-7">
 
-        <div class="mb-5">
-          <label class="mb-2 block text-sm font-medium text-slate-600">نوع لیگ</label>
+        <div class="mb-6 rounded-2xl border border-slate-200 bg-white p-4">
+          <label class="mb-3 block text-sm font-bold text-slate-700">نوع لیگ</label>
           <div class="grid gap-3 sm:grid-cols-2">
             <button
                 v-for="(label, key) in FORMAT_LABELS"
@@ -776,7 +792,7 @@ const totalLeagues = computed(() => leagueStore.leagues.length);
           </div>
         </div>
 
-        <div class="grid gap-4 sm:grid-cols-2">
+        <div class="grid gap-4 rounded-2xl border border-slate-200 bg-white p-4 sm:grid-cols-2 sm:p-5">
           <div>
             <label class="mb-1 block text-sm font-medium text-slate-600">نام لیگ</label>
             <input
@@ -858,20 +874,22 @@ const totalLeagues = computed(() => leagueStore.leagues.length);
         </label>
 
         <p v-if="leagueError" class="mt-3 text-sm text-red-600">{{ leagueError }}</p>
-        <div class="mt-4 flex gap-3">
+        <div class="mt-6 flex flex-col-reverse gap-3 border-t border-slate-200 pt-5 sm:flex-row sm:justify-end">
           <button
               @click="submitLeague"
-              class="rounded-lg bg-green-600 px-5 py-2 font-medium text-white transition hover:bg-green-700"
+              class="rounded-xl bg-amber-500 px-7 py-2.5 font-bold text-slate-950 shadow transition hover:bg-amber-400"
           >
             ایجاد لیگ
           </button>
           <button
               @click="resetLeagueForm"
-              class="rounded-lg bg-slate-200 px-5 py-2 text-slate-700 transition hover:bg-slate-300"
+              class="rounded-xl border border-slate-300 bg-white px-6 py-2.5 font-medium text-slate-700 transition hover:bg-slate-100"
           >
             انصراف
           </button>
         </div>
+        </div>
+       </div>
       </div>
 
       <div
@@ -882,15 +900,16 @@ const totalLeagues = computed(() => leagueStore.leagues.length);
         <p class="text-lg text-slate-500">هنوز لیگی ایجاد نشده است</p>
       </div>
 
-      <div v-else class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+      <div v-else class="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
         <div
             v-for="l in leagueStore.leagues"
             :key="l.id"
-            class="group relative rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition hover:border-blue-300 hover:shadow-md"
+            class="group relative overflow-hidden rounded-3xl border border-slate-200 bg-white p-5 shadow-sm transition duration-300 hover:-translate-y-1 hover:border-amber-300 hover:shadow-xl"
         >
+          <div class="absolute inset-x-0 top-0 h-1 bg-gradient-to-l from-amber-500 to-orange-300"></div>
           <span
               :class="[
-              'absolute right-4 top-4 rounded-full px-2.5 py-1 text-xs font-medium',
+              'mb-4 inline-flex rounded-full px-2.5 py-1 text-xs font-medium',
               l.format === 'team'
                 ? 'bg-purple-100 text-purple-700'
                 : 'bg-emerald-100 text-emerald-700',
@@ -899,8 +918,8 @@ const totalLeagues = computed(() => leagueStore.leagues.length);
             {{ FORMAT_LABELS[l.format ?? "grandPrix"] }}
           </span>
 
-          <div class="mb-3 flex items-start justify-between">
-            <h3 class="pr-20 text-lg font-bold">{{ l.name }}</h3>
+          <div class="mb-4 flex items-start justify-between gap-3 border-b border-slate-100 pb-4">
+            <h3 class="text-lg font-black leading-7 text-slate-900">{{ l.name }}</h3>
             <button
                 @click="removeLeague(l.id, l.name)"
                 class="rounded-lg p-1.5 text-slate-400 opacity-0 transition hover:bg-red-50 hover:text-red-600 group-hover:opacity-100"
@@ -910,15 +929,15 @@ const totalLeagues = computed(() => leagueStore.leagues.length);
             </button>
           </div>
 
-          <div class="space-y-1 text-sm text-slate-500">
-            <p>🗓️ فصل {{ l.season.name }}</p>
-            <p>📚 {{ l.season.stages.length }} مرحله</p>
-            <p>👥 {{ GENDER_LABELS[l.gender] }} — {{ l.ageCategory }}</p>
+          <div class="grid grid-cols-2 gap-2 text-sm">
+            <div class="col-span-2 rounded-xl bg-amber-50 p-3"><div class="text-[10px] text-amber-600">فصل جاری</div><div class="mt-1 font-bold text-amber-900">{{ l.season.name }}</div></div>
+            <div class="rounded-xl bg-slate-50 p-3"><div class="text-[10px] text-slate-400">ساختار</div><div class="mt-1 font-bold text-slate-700">{{ l.season.stages.length }} مرحله</div></div>
+            <div class="rounded-xl bg-slate-50 p-3"><div class="text-[10px] text-slate-400">رده</div><div class="mt-1 truncate font-bold text-slate-700">{{ GENDER_LABELS[l.gender] }} · {{ l.ageCategory }}</div></div>
           </div>
 
           <button
               @click="openLeague(l.id)"
-              class="mt-4 w-full rounded-lg bg-blue-50 py-2 text-sm font-medium text-blue-700 transition hover:bg-blue-100"
+              class="mt-4 w-full rounded-xl bg-slate-900 py-2.5 text-sm font-bold text-white transition hover:bg-amber-600"
           >
             مدیریت لیگ
           </button>
@@ -927,3 +946,9 @@ const totalLeagues = computed(() => leagueStore.leagues.length);
     </div>
   </div>
 </template>
+
+<style scoped>
+.create-modal-panel{scrollbar-width:thin;scrollbar-color:#cbd5e1 transparent}
+.create-modal-panel::-webkit-scrollbar{width:7px}
+.create-modal-panel::-webkit-scrollbar-thumb{border-radius:999px;background:#cbd5e1}
+</style>
