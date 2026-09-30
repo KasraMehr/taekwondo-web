@@ -32,14 +32,22 @@ function Invoke-Json {
 $health = Invoke-Json GET "/health"
 if ($health.status -ne "up") { throw "API health check failed" }
 
-$auth = Invoke-Json POST "/api/v1/auth/register" @{
+# Provision the test owner through this machine's configured database, never HTTP.
+# For a remote API, configure DATABASE_URL to its test database explicitly.
+Push-Location (Join-Path $PSScriptRoot '..')
+try {
+    $Password | & go run ./cmd/create-admin -email $Email -name 'Smoke Organizer' -organization 'Smoke Tournament Organization'
+    if ($LASTEXITCODE -ne 0) { throw 'Could not provision smoke-test account.' }
+} finally { Pop-Location }
+
+$auth = Invoke-Json POST "/api/v1/auth/login" @{
     name = "Smoke Organizer"
     email = $Email
     password = $Password
 }
 $token = $auth.token
 
-$organization = Invoke-Json POST "/api/v1/organizations" @{ name = "Smoke Tournament Organization" } $token
+$organization = @(Invoke-Json GET "/api/v1/organizations" $null $token)[0]
 $orgId = $organization.id
 $root = "/api/v1/organizations/$orgId"
 

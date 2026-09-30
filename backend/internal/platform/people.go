@@ -56,25 +56,9 @@ func (a *API) organizationRoutes(api *gin.RouterGroup) {
 		}
 		return gin.H{"organizationId": orgID, "role": role}, nil
 	}))
-	api.POST("/organizations", a.route(true, false, func(r *Request) (any, error) {
-		in, err := bind[struct {
-			Name string `json:"name"`
-		}](r)
-		if err != nil {
-			return nil, err
-		}
-		in.Name = strings.TrimSpace(in.Name)
-		if in.Name == "" || len(in.Name) > 150 {
-			return nil, bad("organization name is required (max 150 bytes)")
-		}
-		var id string
-		err = r.Tx.QueryRow(r.Context(), `INSERT INTO organizations(name) VALUES($1) RETURNING id::text`, in.Name).Scan(&id)
-		if err != nil {
-			return nil, err
-		}
-		_, err = r.Tx.Exec(r.Context(), `INSERT INTO memberships VALUES($1,$2,'owner')`, id, r.UserID)
-		return gin.H{"id": id, "name": in.Name, "role": "owner"}, err
-	}))
+	api.POST("/organizations", func(c *gin.Context) {
+		c.AbortWithStatusJSON(403, gin.H{"message": "organization provisioning is restricted to the server administrator"})
+	})
 	api.GET("/organizations", a.route(true, false, func(r *Request) (any, error) {
 		return listJSON(r, `SELECT jsonb_build_object('id',o.id,'name',o.name,'role',m.role) FROM organizations o JOIN memberships m ON m.organization_id=o.id WHERE m.user_id=$1 ORDER BY o.name`, r.UserID)
 	}))

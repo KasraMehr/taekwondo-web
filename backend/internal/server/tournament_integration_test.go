@@ -2,10 +2,13 @@ package server
 
 import (
 	"backend/internal/modules/tournaments"
+	"backend/internal/provision"
 	"backend/internal/testutil"
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"net/http"
 	"net/http/httptest"
 	"sync"
@@ -38,18 +41,20 @@ func decode[T any](t *testing.T, b []byte) T {
 	}
 	return value
 }
-func setupAccount(t *testing.T, h http.Handler, email string) (string, string) {
+func setupAccount(t *testing.T, h http.Handler, pool *pgxpool.Pool, email string) (string, string) {
 	t.Helper()
-	auth := decode[map[string]any](t, requestJSON(t, h, "POST", "/api/v1/auth/register", "", map[string]any{"name": "Organizer", "email": email, "password": "integration-only-password"}, 200))
-	token := auth["token"].(string)
-	org := decode[map[string]any](t, requestJSON(t, h, "POST", "/api/v1/organizations", token, map[string]any{"name": "Test organization"}, 200))
-	return token, org["id"].(string)
+	org, err := provision.CreateAdmin(context.Background(), pool, "Organizer", email, "integration-only-password", "Test organization")
+	if err != nil {
+		t.Fatal(err)
+	}
+	auth := decode[map[string]any](t, requestJSON(t, h, "POST", "/api/v1/auth/login", "", map[string]any{"email": email, "password": "integration-only-password"}, 200))
+	return auth["token"].(string), org
 }
 func TestPostgresTournamentHTTPFlow(t *testing.T) {
 	pool := testutil.Database(t)
 	router := NewRouter(pool)
-	token, org := setupAccount(t, router, "organizer@example.test")
-	otherToken, otherOrg := setupAccount(t, router, "other@example.test")
+	token, org := setupAccount(t, router, pool, "organizer@example.test")
+	otherToken, otherOrg := setupAccount(t, router, pool, "other@example.test")
 	base := "/api/v1/organizations/" + org
 	event := decode[tournaments.Tournament](t, requestJSON(t, router, "POST", base+"/tournaments", token, map[string]any{"name": "جام", "date": "2026-10-01", "courts": 4, "gender": "male", "ageCategory": "بزرگسالان", "format": "grandPrix"}, 200))
 	path := base + "/tournaments/" + event.ID
@@ -133,7 +138,7 @@ func TestPostgresTournamentHTTPFlow(t *testing.T) {
 func TestPostgresSettingsPersistAndRollback(t *testing.T) {
 	pool := testutil.Database(t)
 	router := NewRouter(pool)
-	token, org := setupAccount(t, router, "settings@example.test")
+	token, org := setupAccount(t, router, pool, "settings@example.test")
 	base := "/api/v1/organizations/" + org + "/tournaments"
 	event := decode[tournaments.Tournament](t, requestJSON(t, router, "POST", base, token, map[string]any{"name": "Two days", "date": "2026-10-01", "courts": 3, "gender": "male", "ageCategory": "بزرگسالان", "format": "grandPrix"}, 200))
 	path := base + "/" + event.ID

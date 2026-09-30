@@ -12,7 +12,7 @@ import (
 func TestPostgresLeagueRosterCreatesTournamentSnapshot(t *testing.T) {
 	pool := testutil.Database(t)
 	router := NewRouter(pool)
-	token, org := setupAccount(t, router, "league@example.test")
+	token, org := setupAccount(t, router, pool, "league@example.test")
 	base := "/api/v1/organizations/" + org
 	club := decode[map[string]any](t, requestJSON(t, router, http.MethodPost, base+"/clubs", token, map[string]any{"name": "Club One"}, 200))
 	league := decode[leagues.League](t, requestJSON(t, router, http.MethodPost, base+"/leagues", token, map[string]any{"name": "Season 1", "gender": "male", "ageCategory": "بزرگسالان", "seasonName": "2026", "stageCount": 1, "weeksPerStage": 1, "groupNames": []string{"A"}}, 200))
@@ -38,7 +38,7 @@ func TestPostgresLeagueRosterCreatesTournamentSnapshot(t *testing.T) {
 func TestPostgresLeagueStandingsRefreshAfterEachTournamentResult(t *testing.T) {
 	pool := testutil.Database(t)
 	router := NewRouter(pool)
-	token, org := setupAccount(t, router, "live-league@example.test")
+	token, org := setupAccount(t, router, pool, "live-league@example.test")
 	base := "/api/v1/organizations/" + org
 	league := decode[leagues.League](t, requestJSON(t, router, http.MethodPost, base+"/leagues", token, map[string]any{"name": "Live season", "gender": "male", "ageCategory": "بزرگسالان", "seasonName": "2026", "stageCount": 1, "weeksPerStage": 1, "groupNames": []string{"A"}}, 200))
 

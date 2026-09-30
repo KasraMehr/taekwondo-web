@@ -11,7 +11,7 @@ import (
 func TestScopedAdminCanDelegateOnlyOwnPermissionsAndCourt(t *testing.T) {
 	pool := testutil.Database(t)
 	router := NewRouter(pool)
-	ownerToken, org := setupAccount(t, router, "rbac-owner@example.test")
+	ownerToken, org := setupAccount(t, router, pool, "rbac-owner@example.test")
 	base := "/api/v1/organizations/" + org
 	event := decode[tournaments.Tournament](t, requestJSON(t, router, http.MethodPost, base+"/tournaments", ownerToken, map[string]any{"name": "Scoped", "date": "2026-10-01", "courts": 2, "gender": "male", "ageCategory": "بزرگسالان", "format": "grandPrix"}, 200))
 	other := decode[tournaments.Tournament](t, requestJSON(t, router, http.MethodPost, base+"/tournaments", ownerToken, map[string]any{"name": "Other", "date": "2026-10-02", "courts": 2, "gender": "male", "ageCategory": "بزرگسالان", "format": "grandPrix"}, 200))

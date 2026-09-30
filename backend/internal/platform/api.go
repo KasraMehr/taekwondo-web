@@ -11,7 +11,7 @@ import (
 	"io"
 	"log"
 	"net/http"
-	"net/mail"
+
 	"strconv"
 	"strings"
 	"sync"
@@ -257,32 +257,6 @@ type credentials struct {
 	Name     string `json:"name"`
 }
 
-func (a *API) register(r *Request) (any, error) {
-	if !a.authLimit(r.C) {
-		return nil, httpError{429, "too many authentication attempts"}
-	}
-	in, err := bind[credentials](r)
-	if err != nil {
-		return nil, err
-	}
-	in.Email = strings.ToLower(strings.TrimSpace(in.Email))
-	in.Name = strings.TrimSpace(in.Name)
-	parsed, e := mail.ParseAddress(in.Email)
-	if e != nil || parsed.Address != in.Email || len(in.Email) > 254 || in.Name == "" || len(in.Name) > 100 || len(in.Password) < 10 || len(in.Password) > 72 {
-		return nil, bad("name, valid email and password of 10–72 bytes are required")
-	}
-	hash, err := bcrypt.GenerateFromPassword([]byte(in.Password), bcrypt.DefaultCost)
-	if err != nil {
-		return nil, err
-	}
-	var id string
-	err = r.Tx.QueryRow(r.Context(), `INSERT INTO users(email,name,password_hash) VALUES($1,$2,$3) RETURNING id::text`, in.Email, in.Name, string(hash)).Scan(&id)
-	if err != nil {
-		return nil, err
-	}
-	return newSession(r, id)
-}
-
 var dummyHash, _ = bcrypt.GenerateFromPassword([]byte("constant-dummy-password"), bcrypt.DefaultCost)
 
 func (a *API) login(r *Request) (any, error) {
@@ -318,7 +292,10 @@ func newSession(r *Request, userID string) (any, error) {
 }
 func (a *API) Routes(router *gin.Engine) {
 	api := router.Group("/api/v1")
-	api.POST("/auth/register", a.route(false, false, a.register))
+	// Account provisioning is a server-side operation, never an HTTP operation.
+	api.POST("/auth/register", func(c *gin.Context) {
+		c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"message": "public registration is disabled; contact the administrator"})
+	})
 	api.POST("/auth/login", a.route(false, false, a.login))
 	api.GET("/public/ovr", a.route(false, false, a.publicOVR))
 	api.POST("/auth/logout", a.route(true, false, func(r *Request) (any, error) {
