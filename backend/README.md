@@ -63,7 +63,7 @@ go run ./cmd/migrate
 
 ## احراز هویت در Postman
 
-ابتدا `POST /api/v1/auth/register` را بزنید و مقدار `token` پاسخ را برای درخواست‌های بعدی در Header بگذارید:
+ابتدا حساب را طبق [راهنمای ساخت مدیر](../docs/admin-provisioning.md) با دسترسی دیتابیس بسازید. ثبت‌نام عمومی بسته است. سپس `POST /api/v1/auth/login` را با ایمیل و رمز بزنید و مقدار `token` پاسخ را برای درخواست‌های بعدی در Header بگذارید:
 
 ```text
 Authorization: Bearer TOKEN

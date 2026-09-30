@@ -137,37 +137,11 @@ http://127.0.0.1:5173/
 
 ## حساب اولیه و ورود
 
-در دیتابیس تازه، ابتدا حساب کاربری را با API ثبت‌نام بسازید. سپس با token پاسخ، سازمان را ایجاد کنید؛ سازنده‌ی سازمان با نقش `owner` و تمام دسترسی‌های مدیریتی عضو آن می‌شود. endpoint ثبت‌نام:
+ثبت‌نام عمومی غیرفعال است. برای ساخت مدیر از ابزار محلی متصل به دیتابیس استفاده کنید؛ مراحل در [راهنمای ساخت مدیر](admin-provisioning.md) آمده است. روی سرور دستور زیر را از طریق SSH اجرا کنید:
 
-```text
-POST http://127.0.0.1:8080/api/v1/auth/register
+```bash
+sudo bash /opt/tkdhub/scripts/create-admin.sh
 ```
-
-نمونه‌ی PowerShell:
-
-```powershell
-$body = @{
-  name = 'مدیر مسابقات'
-  email = 'admin@example.com'
-  password = 'ChangeThisPassword123!'
-} | ConvertTo-Json
-
-$session = Invoke-RestMethod `
-  -Method Post `
-  -Uri http://127.0.0.1:8080/api/v1/auth/register `
-  -ContentType 'application/json' `
-  -Body $body
-
-$organization = @{ name = 'هیئت تکواندو' } | ConvertTo-Json
-Invoke-RestMethod `
-  -Method Post `
-  -Uri http://127.0.0.1:8080/api/v1/organizations `
-  -Headers @{ Authorization = "Bearer $($session.token)" } `
-  -ContentType 'application/json' `
-  -Body $organization
-```
-
-نام فیلدهای دقیق پاسخ و دسترسی‌ها در [مستند سطح دسترسی](../backend/docs/access-control.md) آمده است. رمز نمونه را برای محیط واقعی تغییر دهید و اطلاعات ورود را داخل مخزن ثبت نکنید.
 
 ## URLهای کاربردی
 
