@@ -9,7 +9,8 @@ export type TournamentTab =
     | "draw"
     | "matches"
     | "standings"
-    | "export";
+    | "export"
+    | "settings";
 export type LeagueTab = "setup" | "roster" | "overview" | "weeks" | "settings"
 
 export type TeamTournamentTab =
