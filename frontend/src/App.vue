@@ -1,5 +1,9 @@
 <script setup lang="ts">
-import { onMounted, reactive, ref, watch } from 'vue'
+import { onMounted, onUnmounted, reactive, ref, watch } from 'vue'
+import { ApiError } from './api'
+import { usePoomsaeStore } from './stores/poomsae'
+import type { PoomsaeTab } from './stores/ui'
+import PoomsaePage from './components/Poomsae/PoomsaePage.vue'
 import { useUiStore } from './stores/ui'
 import { useTournamentStore } from './stores/tournament'
 import { useLeagueStore } from './stores/league'
@@ -13,6 +17,8 @@ import PublicOVR from './components/PublicOVR.vue'
 const ui = useUiStore()
 const tournamentStore = useTournamentStore()
 const leagueStore = useLeagueStore()
+const poomsaeStore = usePoomsaeStore()
+const ready = ref(false)
 const session = ref(savedSession())
 const loading = ref(false)
 const error = ref('')
@@ -20,17 +26,32 @@ const form = reactive({ email: '', password: '' })
 const isPublicOVR = location.pathname.toLowerCase() === '/ovr'
 function applyUrl(){
   const parts=location.pathname.split('/').filter(Boolean)
+  if(parts[0]==='poomsae') { ui.homeSection='poomsae'; if(parts[1]) { ui.poomsaeEventId=parts[1]; ui.poomsaeDivisionId=new URLSearchParams(location.search).get('division')||''; ui.poomsaeTab=(['athletes','draw','scores','standings','print','settings'].includes(parts[2])?parts[2]:'athletes') as PoomsaeTab; ui.page='poomsae' } else ui.goHome(); return }
   if(parts[0]==='tournaments'&&parts[1]&&tournamentStore.tournaments.some(t=>t.id===parts[1])){tournamentStore.selectTournament(parts[1]);ui.page='tournament';ui.tab=(parts[2]||'athletes') as any;return}
   if(parts[0]==='leagues'&&parts[1]&&leagueStore.leagues.some(l=>l.id===parts[1])){leagueStore.selectLeague(parts[1]);ui.page='league';ui.leagueTab=(parts[2]||'setup') as any;return}
   ui.goHome()
 }
-function currentUrl(){if(ui.page==='tournament'&&tournamentStore.currentTournamentId)return`/tournaments/${tournamentStore.currentTournamentId}${ui.tab==='athletes'?'':`/${ui.tab}`}`;if(ui.page==='league'&&leagueStore.currentLeagueId)return`/leagues/${leagueStore.currentLeagueId}${ui.leagueTab==='setup'?'':`/${ui.leagueTab}`}`;return'/'}
-async function hydrate(){loading.value=true;error.value='';try{const [items,leagues]=await Promise.all([loadWebTournaments(),loadWebLeagues()]);tournamentStore.tournaments.splice(0,tournamentStore.tournaments.length,...items as any);tournamentStore.save();leagueStore.replaceFromBackend(leagues);applyUrl()}catch(e:any){const message=e?.message||'دریافت اطلاعات ناموفق بود';if(/session expired|authentication required|invalid session/i.test(message)){saveSession(null);session.value=null;ui.goHome();error.value=''}else{error.value=message}}finally{loading.value=false}}
+function currentUrl(){if(ui.page==='poomsae'&&ui.poomsaeEventId)return `/poomsae/${ui.poomsaeEventId}/${ui.poomsaeTab}${ui.poomsaeDivisionId?'?division='+encodeURIComponent(ui.poomsaeDivisionId):''}`;if(ui.page==='tournament'&&tournamentStore.currentTournamentId)return`/tournaments/${tournamentStore.currentTournamentId}${ui.tab==='athletes'?'':`/${ui.tab}`}`;if(ui.page==='league'&&leagueStore.currentLeagueId)return`/leagues/${leagueStore.currentLeagueId}${ui.leagueTab==='setup'?'':`/${ui.leagueTab}`}`;return ui.homeSection==='poomsae'?'/poomsae':'/'}
+async function hydrate(){
+  loading.value=true;ready.value=false;error.value=''
+  try {
+    const [items,leagues]=await Promise.allSettled([loadWebTournaments(),loadWebLeagues()])
+    for(const result of [items,leagues]) if(result.status==='rejected' && (!(result.reason instanceof ApiError)||result.reason.status!==403)) throw result.reason
+    if(items.status==='fulfilled'){tournamentStore.tournaments.splice(0,tournamentStore.tournaments.length,...items.value as any);tournamentStore.save()}
+    else tournamentStore.tournaments.splice(0)
+    if(leagues.status==='fulfilled')leagueStore.replaceFromBackend(leagues.value)
+    else leagueStore.replaceFromBackend([])
+    applyUrl()
+  }catch(e:any){const message=e?.message||'دریافت اطلاعات ناموفق بود';if((e instanceof ApiError&&e.status===401)||/session expired|authentication required|invalid session/i.test(message)){saveSession(null);session.value=null;ui.goHome();error.value=''}else{error.value=message;applyUrl()}}finally{loading.value=false;ready.value=true}
+}
 async function submitLogin(){loading.value=true;error.value='';try{session.value=await loginWeb(form.email,form.password);await hydrate()}catch(e:any){error.value=e?.message||'ورود ناموفق بود'}finally{loading.value=false}}
-function logout(){saveSession(null);session.value=null;error.value='';ui.goHome()}
+function logout(){if(poomsaeStore.dirtyCount&&!confirm('نمرهٔ ذخیره‌نشده دارید. بدون ذخیره خارج می‌شوید؟'))return;poomsaeStore.reset();saveSession(null);session.value=null;error.value='';ui.goHome()}
 onMounted(()=>{if(session.value)hydrate()})
 onMounted(()=>window.addEventListener('popstate',applyUrl))
-watch([()=>ui.page,()=>ui.tab,()=>ui.leagueTab,()=>tournamentStore.currentTournamentId,()=>leagueStore.currentLeagueId],()=>{const url=currentUrl();if(location.pathname!==url)history.pushState({},'',url)})
+function beforeLeave(e:BeforeUnloadEvent){if(poomsaeStore.dirtyCount){e.preventDefault();e.returnValue=''}}
+onMounted(()=>window.addEventListener('beforeunload',beforeLeave))
+onUnmounted(()=>{window.removeEventListener('popstate',applyUrl);window.removeEventListener('beforeunload',beforeLeave)})
+watch([()=>ui.page,()=>ui.tab,()=>ui.leagueTab,()=>ui.homeSection,()=>ui.poomsaeEventId,()=>ui.poomsaeDivisionId,()=>ui.poomsaeTab,()=>tournamentStore.currentTournamentId,()=>leagueStore.currentLeagueId],()=>{if(!ready.value)return;const url=currentUrl();if(location.pathname+location.search!==url)history.pushState({},'',url)})
 </script>
 
 <template>
@@ -57,10 +78,11 @@ watch([()=>ui.page,()=>ui.tab,()=>ui.leagueTab,()=>tournamentStore.currentTourna
     <main class="mx-auto max-w-6xl px-6 py-8">
       <div v-if="loading" class="mb-4 rounded-lg bg-blue-50 p-3 text-sm text-blue-700">در حال همگام‌سازی با سرور…</div>
       <div v-if="error" class="mb-4 rounded-lg bg-red-50 p-3 text-sm text-red-700">{{ error }}</div>
-      <HomePage v-if="ui.page === 'home'" />
+      <HomePage v-if="ready && ui.page === 'home'" />
       <TournamentPage v-if="ui.page === 'tournament'" />
       <TeamTournamentPage v-else-if="ui.page === 'teamTournament'" />
       <LeaguePage v-else-if="ui.page === 'league'" />
+      <PoomsaePage v-else-if="ready && ui.page === 'poomsae'" />
     </main>
   </div>
 </template>

@@ -8,6 +8,7 @@ import { AGE_CATEGORIES, GENDER_LABELS, WEIGHT_CATEGORIES } from "../data/catego
 import type { Gender, AgeCategory } from "../data/categories";
 import type { TournamentFormat, TeamTournamentStatus } from "../types";
 import { loadWebLeagues, webApi } from "../webApi";
+import PoomsaeList from './Poomsae/PoomsaeList.vue';
 import {
   isValidJalaaliDate,
   toGregorian,
@@ -232,7 +233,7 @@ const error = ref("");
 
 const blindLineup = ref(false);
 
-const activeTab = ref<"tournaments" | "leagues">("tournaments");
+const activeTab = computed({ get: () => ui.homeSection, set: (value) => { ui.homeSection = value } });
 const formatFilter = ref<FormatFilter>("all");
 
 function resetForm() {
@@ -501,6 +502,7 @@ const totalLeagues = computed(() => leagueStore.leagues.length);
       >
         لیگ‌ها
       </button>
+      <button @click="activeTab = 'poomsae'" class="flex-1 rounded-xl px-5 py-3 text-sm font-bold transition" :class="activeTab === 'poomsae' ? 'bg-teal-700 text-white shadow-md' : 'text-slate-500 hover:bg-slate-100'">پومسه</button>
     </div>
 
     <!-- ═══════════════ تب مسابقات ═══════════════ -->
@@ -753,7 +755,7 @@ const totalLeagues = computed(() => leagueStore.leagues.length);
     </div>
 
     <!-- ═══════════════ تب لیگ‌ها ═══════════════ -->
-    <div v-else>
+    <div v-else-if="activeTab === 'leagues'">
       <div class="mb-6 flex items-center justify-between rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
         <div class="px-2"><div class="text-sm font-bold text-slate-800">لیگ‌های ثبت‌شده</div><div class="mt-0.5 text-xs text-slate-400">فصل‌ها، تیم‌ها و هفته‌های مسابقات</div></div>
         <button
@@ -944,6 +946,7 @@ const totalLeagues = computed(() => leagueStore.leagues.length);
         </div>
       </div>
     </div>
+    <PoomsaeList v-else />
   </div>
 </template>
 
