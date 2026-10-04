@@ -1,5 +1,8 @@
 const API='/api/v1'
 export type Session={token:string;orgId:string;userId:string}
+export class ApiError extends Error {
+  constructor(message: string, public status: number) { super(message); this.name = 'ApiError' }
+}
 
 async function responseData(response: Response) {
   if (response.status === 204) return null
@@ -11,10 +14,10 @@ async function responseData(response: Response) {
 
 export class Api {
   constructor(public session:Session){}
-  async call<T=any>(path:string,method='GET',body?:any):Promise<T>{
-    const res=await fetch(path.startsWith('/api')?path:`${API}/organizations/${this.session.orgId}${path}`,{method,headers:{Authorization:`Bearer ${this.session.token}`,...(body!==undefined?{'Content-Type':'application/json'}:{})},body:body!==undefined?JSON.stringify(body):undefined})
+  async call<T=any>(path:string,method='GET',body?:any,options?:{revision?:number}):Promise<T>{
+    const res=await fetch(path.startsWith('/api')?path:`${API}/organizations/${this.session.orgId}${path}`,{method,headers:{Authorization:`Bearer ${this.session.token}`,...(body!==undefined?{'Content-Type':'application/json'}:{}),...(options?.revision!==undefined?{'If-Match':`"${options.revision}"`}:{})},body:body!==undefined?JSON.stringify(body):undefined})
     const data=await responseData(res)
-    if(!res.ok)throw new Error(data?.message||`خطای ${res.status}`)
+    if(!res.ok)throw new ApiError(data?.message||`خطای ${res.status}`,res.status)
     return data as T
   }
 }
