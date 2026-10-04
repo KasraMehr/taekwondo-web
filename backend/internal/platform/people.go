@@ -7,6 +7,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"golang.org/x/crypto/bcrypt"
 	"net/mail"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -328,7 +329,11 @@ func (a *API) profileRoutes(org *gin.RouterGroup) {
 		if err := r.permit(permAthletesRead); err != nil {
 			return nil, err
 		}
-		return listJSON(r, `SELECT `+profileJSON+` FROM athletes a WHERE organization_id=$1 AND `+profileAccess+` ORDER BY a.name,a.id LIMIT 200`, r.OrganizationID, r.UserID, r.Role)
+		limit, offset := 200, 0
+		var err error
+		if value := r.C.Query("limit"); value != "" { limit, err = strconv.Atoi(value); if err != nil || limit < 1 || limit > 200 { return nil, bad("limit must be 1..200") } }
+		if value := r.C.Query("offset"); value != "" { offset, err = strconv.Atoi(value); if err != nil || offset < 0 { return nil, bad("invalid offset") } }
+		return listJSON(r, `SELECT `+profileJSON+` FROM athletes a WHERE organization_id=$1 AND `+profileAccess+` AND ($6='' OR strpos(lower(a.name),lower($6))>0) ORDER BY a.name,a.id LIMIT $4 OFFSET $5`, r.OrganizationID, r.UserID, r.Role, limit, offset, strings.TrimSpace(r.C.Query("search")))
 	}))
 	org.GET("/athletes/:athlete", a.route(true, true, func(r *Request) (any, error) {
 		if err := r.permit(permAthletesRead); err != nil {

@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"backend/internal/modules/leagues"
+	"backend/internal/modules/poomsae"
 	"backend/internal/modules/tournaments"
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
@@ -186,6 +187,12 @@ func writeError(c *gin.Context, err error) {
 	switch {
 	case errors.As(err, &h):
 		status, message = h.Status, h.Message
+	case errors.Is(err, poomsae.ErrInvalid):
+		status, message = 400, err.Error()
+	case errors.Is(err, poomsae.ErrConflict):
+		status, message = 409, err.Error()
+	case errors.Is(err, poomsae.ErrNotFound):
+		status, message = 404, err.Error()
 	case errors.Is(err, pgx.ErrNoRows), errors.Is(err, tournaments.ErrTournamentNotFound), errors.Is(err, tournaments.ErrAthleteNotFound), errors.Is(err, tournaments.ErrMatchNotFound), errors.Is(err, leagues.ErrNotFound):
 		status, message = 404, "resource not found"
 	case errors.Is(err, tournaments.ErrConflict):
@@ -312,4 +319,5 @@ func (a *API) Routes(router *gin.Engine) {
 	a.profileRoutes(org)
 	a.tournamentRoutes(org)
 	a.leagueRoutes(org)
+	a.poomsaeRoutes(org)
 }

@@ -139,3 +139,4 @@ API flows and request examples:
 - [Tournament API](docs/tournament-stage.md)
 - [League API](docs/league-stage.md)
 - [Accounts and access control](docs/access-control.md)
+- [Poomsae API and scoring](docs/poomsae.md)

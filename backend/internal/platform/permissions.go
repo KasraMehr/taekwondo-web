@@ -41,9 +41,11 @@ var rolePermissions = map[string][]string{
 }
 
 type AccessScope struct {
-	TournamentIDs []string `json:"tournamentIds,omitempty"`
-	Courts        []string `json:"courts,omitempty"`
-	Stations      []string `json:"stations,omitempty"`
+	PoomsaeEventIDs    []string `json:"poomsaeEventIds,omitempty"`
+	PoomsaeDivisionIDs []string `json:"poomsaeDivisionIds,omitempty"`
+	TournamentIDs      []string `json:"tournamentIds,omitempty"`
+	Courts             []string `json:"courts,omitempty"`
+	Stations           []string `json:"stations,omitempty"`
 }
 
 func normalizePermissions(values []string) ([]string, error) {
@@ -154,6 +156,11 @@ func (r *Request) canGrant(permissions []string) error {
 
 func permissionOptions() []map[string]string {
 	labels := map[string]string{permMembersManage: "مدیریت کاربران", permAuditRead: "مشاهده گزارش تغییرات", permClubsManage: "مدیریت باشگاه‌ها", permAthletesRead: "مشاهده ورزشکاران", permAthletesManage: "مدیریت ورزشکاران", permTournamentsRead: "مشاهده تورنومنت", permTournamentsManage: "مدیریت تورنومنت", permDrawManage: "قرعه‌کشی", permWeighInManage: "وزن‌کشی", permMatchesOperate: "اجرای بازی و ثبت نتیجه", permMatchesOverride: "اصلاح نتیجه", permSheetsTA: "برگه TA", permLeaguesRead: "مشاهده لیگ", permLeaguesManage: "مدیریت لیگ"}
+	labels[permPoomsaeRead] = "مشاهده پومسه"
+	labels[permPoomsaeManage] = "مدیریت پومسه"
+	labels[permPoomsaeDraw] = "قرعه‌کشی پومسه"
+	labels[permPoomsaeScore] = "ثبت نمرات پومسه"
+	labels[permPoomsaeOverride] = "بازگشایی نتایج پومسه"
 	out := make([]map[string]string, 0, len(labels))
 	for key, label := range labels {
 		out = append(out, map[string]string{"value": key, "label": label})
