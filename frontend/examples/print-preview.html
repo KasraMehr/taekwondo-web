@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="fa" dir="rtl">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>مسابقه آزمایشی — پیش‌نمایش چاپ</title></head>
+<body>
+<div id="app"></div>
+<script type="module">
+import { createApp } from 'vue'
+import { createPinia } from 'pinia'
+import BracketPdfExport from '/src/components/BracketPdfExport.vue'
+import { useTournamentStore } from '/src/stores/tournament'
+import { generateBracket } from '/src/utils/bracket'
+import '/src/style.css'
+
+const app = createApp(BracketPdfExport)
+const pinia = createPinia()
+app.use(pinia)
+const store = useTournamentStore(pinia)
+const names = ['علی رضایی', 'محمد حسینی', 'امیرحسین محمدی', 'رضا کریمی', 'آرین احمدی', 'پارسا مرادی', 'محمدمهدی رحمانی', 'سامان اکبری']
+const clubs = ['آزادی', 'پیشگامان', 'قهرمانان', 'پاس']
+const coaches = ['حسن رحمت‌پناه', 'علی محمدی', 'محمدرضا کریمی', 'رضا احمدی']
+const athletes = names.map((name, i) => ({
+  id: `print-demo-athlete-${i + 1}`, name, club: clubs[i % 4], coach: coaches[i % 4],
+  weightCategory: '-58', ranking: i + 1, weighedIn: true,
+  weighIn: { status: 'passed', weightKg: 57.5, attempts: [], withTolerance: false },
+}))
+const matches = generateBracket(athletes, '-58', 1, 'ranked')
+matches.forEach((match, i) => { match.court = 1; match.order = i + 1; match.matchNumber = i + 1 })
+const tournament = {
+  id: 'print-preview-demo', name: 'مسابقه آزمایشی چاپ — اطلاعات نمونه', date: '2026-10-03',
+  courts: 1, gender: 'male', ageCategory: 'بزرگسالان', format: 'grandPrix',
+  athletes, matches, courtAssignment: { '-58': [1] },
+  createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
+}
+// This preview only adds in-memory data; it does not save or replace real tournaments.
+store.tournaments.push(tournament)
+store.selectTournament(tournament.id)
+app.mount('#app')
+</script>
+</body>
+</html>
