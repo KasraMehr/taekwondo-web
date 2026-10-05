@@ -12,7 +12,16 @@
           {{ c.label }} {{ toFa(c.count) }}
         </button>
       </div>
-      <span class="mr-auto self-center text-sm text-slate-500">
+      <button
+          v-if="athletes.length"
+          type="button"
+          :disabled="bulkApproving || countByStatus.pending + countByStatus.failed === 0"
+          class="mr-auto rounded-lg bg-emerald-600 px-4 py-2 text-sm font-bold text-white shadow-sm hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-40"
+          @click="approveAll"
+      >
+        {{ bulkApproving ? 'در حال تأیید…' : 'تأیید وزن‌کشی همه' }}
+      </button>
+      <span class="self-center text-sm text-slate-500">
         {{ toFa(doneCount) }} از {{ toFa(athletes.length) }} انجام شده
       </span>
     </div>
@@ -657,6 +666,21 @@ const filterWeight = ref('')
 const filterStatus = ref('')
 const groupBy = ref('weight')
 const searchInput = ref(null)
+const bulkApproving = ref(false)
+
+async function approveAll() {
+  const remaining = countByStatus.value.pending + countByStatus.value.failed
+  if (!remaining || bulkApproving.value) return
+  if (!confirm(`وزن‌کشی ${toFa(remaining)} ورزشکار بدون ثبت عدد وزن، یک‌جا تأیید شود؟`)) return
+  bulkApproving.value = true
+  const result = await store.approveAllWeighIns(tid.value)
+  bulkApproving.value = false
+  if (result.error) {
+    notify(result.error)
+    return
+  }
+  notify(`وزن‌کشی ${toFa(result.count)} ورزشکار تأیید شد`)
+}
 
 function focusSearch() {
   nextTick(() => searchInput.value?.focus())

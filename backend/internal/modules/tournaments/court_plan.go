@@ -90,9 +90,16 @@ func applyCourtPlanSingleDay(t *Tournament) {
 		case "split_halves":
 			courts = courts[:min(2, t.Courts)]
 		default:
-			courts = courts[:1]
+			// Balanced mode distributes playable matches, rather than whole
+			// categories, across every court. Keeping a full category on one
+			// court creates a large imbalance when category count is not a
+			// multiple of court count.
 		}
-		assignCategoryCourts(t.Matches, stat.category, courts)
+		if settings.Mode == "balanced" {
+			assignCategoryCourtsBalanced(t.Matches, stat.category, courts, loads)
+		} else {
+			assignCategoryCourts(t.Matches, stat.category, courts)
+		}
 		used := map[int]bool{}
 		maxRound := 0
 		for _, m := range t.Matches {
@@ -191,6 +198,45 @@ func assignCategoryCourts(matches []Match, category string, courts []int) {
 				m.Court = courts[min(len(courts)-1, position*len(courts)/len(indices))]
 			}
 		}
+	}
+}
+
+func assignCategoryCourtsBalanced(matches []Match, category string, courts, currentLoads []int) {
+	if len(courts) == 0 {
+		courts = []int{1}
+	}
+	projected := append([]int(nil), currentLoads...)
+	indices := []int{}
+	for i := range matches {
+		if matches[i].WeightCategory == category {
+			indices = append(indices, i)
+		}
+	}
+	sort.SliceStable(indices, func(i, j int) bool {
+		a, b := matches[indices[i]], matches[indices[j]]
+		if a.Round != b.Round {
+			return a.Round < b.Round
+		}
+		if a.BracketIndex != nil && b.BracketIndex != nil {
+			return *a.BracketIndex < *b.BracketIndex
+		}
+		return a.ID < b.ID
+	})
+	for _, index := range indices {
+		match := &matches[index]
+		if lifecycleIsBye(match) {
+			match.Court = 0
+			match.Order = 0
+			continue
+		}
+		best := courts[0]
+		for _, court := range courts[1:] {
+			if projected[court] < projected[best] || projected[court] == projected[best] && court < best {
+				best = court
+			}
+		}
+		match.Court = best
+		projected[best]++
 	}
 }
 func syncMatchOrders(matches []Match) {
@@ -304,7 +350,24 @@ func applyHoguCourtPlan(t *Tournament) error {
 	for category := range t.CourtAssignment {
 		categories = append(categories, category)
 	}
-	sort.Strings(categories)
+	sort.SliceStable(categories, func(i, j int) bool {
+		left, right := 0, 0
+		for _, match := range t.Matches {
+			if lifecycleIsBye(&match) {
+				continue
+			}
+			if match.WeightCategory == categories[i] {
+				left++
+			}
+			if match.WeightCategory == categories[j] {
+				right++
+			}
+		}
+		if left == right {
+			return categories[i] < categories[j]
+		}
+		return left > right
+	})
 	for _, category := range categories {
 		size := strings.TrimSpace(hogu.CategorySizes[category])
 		if size == "" {
@@ -322,6 +385,14 @@ func applyHoguCourtPlan(t *Tournament) error {
 		if len(compatible) == 0 {
 			return fmt.Errorf("%w: no court has hogu size %s required for category %s", ErrInvalidTournamentInput, size, category)
 		}
+		scheduleMode := settingsFor(t).Schedule.Mode
+		if scheduleMode == "single_court" {
+			single := settingsFor(t).Schedule.SingleCourt
+			if !containsInt(compatible, single) {
+				return fmt.Errorf("%w: court %d does not have hogu size %s required for category %s", ErrInvalidTournamentInput, single, size, category)
+			}
+			compatible = []int{single}
+		}
 		moved := map[string]int{}
 		for _, match := range t.Matches {
 			if match.WeightCategory == category && match.MovedAt != nil && !lifecycleIsBye(&match) {
@@ -331,27 +402,20 @@ func applyHoguCourtPlan(t *Tournament) error {
 				moved[match.ID] = match.Court
 			}
 		}
-		if assigned := t.CourtAssignment[category]; len(assigned) > 0 {
-			kept := []int{}
-			for _, court := range assigned {
-				if containsInt(compatible, court) {
-					kept = append(kept, court)
-				}
-			}
-			if len(kept) > 0 {
-				compatible = kept
-			}
-		}
 		sort.SliceStable(compatible, func(i, j int) bool {
 			if loads[compatible[i]] == loads[compatible[j]] {
 				return compatible[i] < compatible[j]
 			}
 			return loads[compatible[i]] < loads[compatible[j]]
 		})
-		if len(compatible) > 2 {
+		if scheduleMode == "split_halves" && len(compatible) > 2 {
 			compatible = compatible[:2]
 		}
-		assignCategoryCourts(t.Matches, category, compatible)
+		if scheduleMode == "balanced" {
+			assignCategoryCourtsBalanced(t.Matches, category, compatible, loads)
+		} else {
+			assignCategoryCourts(t.Matches, category, compatible)
+		}
 		for i := range t.Matches {
 			if court, ok := moved[t.Matches[i].ID]; ok {
 				t.Matches[i].Court = court

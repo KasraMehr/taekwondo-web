@@ -146,6 +146,37 @@ func TestWeighInAttemptsResetAndSignature(t *testing.T) {
 		t.Fatal("reset without a bracket must not destroy weigh-ins")
 	}
 }
+
+func TestApproveAllWeighIns(t *testing.T) {
+	s, r, id := newFixture(t)
+	for _, name := range []string{"A", "B"} {
+		if _, err := s.AddAthlete(context.Background(), id, AddAthleteInput{Name: name, WeightCategory: "-58"}); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	got, err := s.ApproveAllWeighIns(context.Background(), id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, athlete := range got.Athletes {
+		if athlete.WeighIn == nil || athlete.WeighIn.Status != WeighInPassed {
+			t.Fatalf("athlete %s was not approved: %+v", athlete.Name, athlete.WeighIn)
+		}
+		if athlete.WeighIn.WeightKg != nil || len(athlete.WeighIn.Attempts) != 0 {
+			t.Fatalf("bulk approval must not fabricate a measured weight: %+v", athlete.WeighIn)
+		}
+	}
+
+	if _, err = s.DrawBracketForCategory(context.Background(), id, "-58", "random"); err != nil {
+		t.Fatal(err)
+	}
+	before := r.writes
+	if _, err = s.ApproveAllWeighIns(context.Background(), id); !errors.Is(err, ErrBracketAlreadyDrawn) || r.writes != before {
+		t.Fatalf("bulk approval after draw: err=%v writes=%d want=%d", err, r.writes, before)
+	}
+}
+
 func TestLinkedProfileIdentityAndIsolation(t *testing.T) {
 	s, r, id := newFixture(t)
 	profileID := uuid.NewString()
@@ -335,13 +366,67 @@ func TestSettingsTwoDaysAndNumberingModes(t *testing.T) {
 				}
 			}
 			if mode == "balanced" {
-				for _, courts := range result.CourtAssignment {
-					if len(courts) != 1 {
-						t.Fatal("balanced mode must keep weight on one court")
+				loads := map[int][]int{}
+				for _, match := range result.Matches {
+					if !lifecycleIsBye(&match) {
+						if loads[match.Day] == nil {
+							loads[match.Day] = make([]int, result.Courts+1)
+						}
+						loads[match.Day][match.Court]++
+					}
+				}
+				for day, dayLoads := range loads {
+					minimum, maximum := dayLoads[1], dayLoads[1]
+					for court := 2; court <= result.Courts; court++ {
+						minimum = min(minimum, dayLoads[court])
+						maximum = max(maximum, dayLoads[court])
+					}
+					if maximum-minimum > 1 {
+						t.Fatalf("balanced mode produced uneven court loads on day %d: %v", day, dayLoads[1:])
 					}
 				}
 			}
 		})
+	}
+}
+
+func TestBalancedCourtsWithFivePopulatedCadetCategories(t *testing.T) {
+	r := &memoryRepository{profiles: map[string]*AthleteProfile{}}
+	s := NewTournamentService(r)
+	event, err := s.Create(context.Background(), CreateTournamentInput{Name: "نوجوانان", Date: "2026-10-05", Courts: 4, Gender: GenderMale, AgeCategory: AgeCategoryNojavanan, Format: TournamentFormatGrandPrix})
+	if err != nil {
+		t.Fatal(err)
+	}
+	counts := map[string]int{"-45": 21, "-51": 22, "-59": 21, "-68": 21, "-78": 16}
+	weights := map[string]float64{"-45": 45, "-51": 50, "-59": 58, "-68": 67, "-78": 77}
+	for category, count := range counts {
+		for i := 0; i < count; i++ {
+			athlete, addErr := s.AddAthlete(context.Background(), event.ID, AddAthleteInput{Name: fmt.Sprintf("%s-%d", category, i), Club: fmt.Sprintf("club-%d", i%12), WeightCategory: category})
+			if addErr != nil {
+				t.Fatal(addErr)
+			}
+			if _, weighErr := s.RecordWeighIn(context.Background(), event.ID, athlete.ID, RecordWeighInInput{WeightKg: weights[category]}); weighErr != nil {
+				t.Fatal(weighErr)
+			}
+		}
+	}
+	drawn, err := s.DrawBracket(context.Background(), event.ID, "random")
+	if err != nil {
+		t.Fatal(err)
+	}
+	loads := make([]int, drawn.Courts+1)
+	for _, match := range drawn.Matches {
+		if !lifecycleIsBye(&match) {
+			loads[match.Court]++
+		}
+	}
+	minimum, maximum := loads[1], loads[1]
+	for court := 2; court <= drawn.Courts; court++ {
+		minimum = min(minimum, loads[court])
+		maximum = max(maximum, loads[court])
+	}
+	if maximum-minimum > 1 {
+		t.Fatalf("expected nearly equal court loads, got %v", loads[1:])
 	}
 }
 func TestNumberingSettingsAndLocks(t *testing.T) {
