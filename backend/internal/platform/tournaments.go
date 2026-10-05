@@ -47,7 +47,7 @@ func (a *API) tournamentRoutes(org *gin.RouterGroup) {
 			return nil, err
 		}
 		return gin.H{
-			"scheduleModes":      []gin.H{{"value": "single_court", "label": "همه بازی‌ها روی یک زمین"}, {"value": "split_halves", "label": "دو نیمه جدول روی دو زمین تا فینال"}, {"value": "balanced", "label": "توزیع متوازن اوزان؛ هر وزن روی یک زمین"}},
+			"scheduleModes":      []gin.H{{"value": "single_court", "label": "همه بازی‌ها روی یک زمین"}, {"value": "split_halves", "label": "دو نیمه جدول روی دو زمین تا فینال"}, {"value": "balanced", "label": "توزیع متوازن بازی‌ها بین زمین‌ها"}},
 			"numberingScopes":    []gin.H{{"value": "tournament", "label": "شماره یکتا در کل تورنومنت"}, {"value": "day", "label": "شروع مجدد در هر روز"}, {"value": "court_day", "label": "شروع مجدد برای هر زمین در هر روز"}},
 			"numberingOrders":    []gin.H{{"value": "rounds", "label": "هماهنگی مراحل؛ فینال‌ها در پایان"}, {"value": "category", "label": "تکمیل هر وزن به ترتیب فهرست اوزان"}},
 			"dayAssignments":     []gin.H{{"value": "manual", "label": "انتخاب دستی روز هر وزن"}, {"value": "alternating", "label": "جایگاه‌های فرد روز اول، زوج روز دوم"}},
