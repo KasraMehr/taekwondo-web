@@ -3,6 +3,7 @@ import { computed, ref, watch } from 'vue'
 import draggable from 'vuedraggable'
 import { useTournamentStore } from '../stores/tournament'
 import type { Match } from '../types'
+import { webApi } from '../webApi'
 
 const store = useTournamentStore()
 const t = computed(() => store.currentTournament)
@@ -10,11 +11,71 @@ const matches = computed(() => t.value?.matches ?? [])
 
 const activeTab = ref<'categories' | 'schedule' | 'bracket'>('categories')
 const sortMode = ref<'weight' | 'count'>('weight')
+const numberingPreview = ref<any | null>(null)
+const numberingBusy = ref(false)
+const numberingError = ref('')
+const numberingReadiness = ref<any | null>(null)
+
+async function loadNumberingReadiness() {
+  if (!t.value) return
+  try {
+    numberingReadiness.value = await webApi().call(`/tournaments/${t.value.id}/draw-readiness`)
+  } catch (error: any) {
+    numberingReadiness.value = null
+    numberingError.value = error?.message || 'بررسی کامل بودن قرعه ناموفق بود'
+  }
+}
+
+watch(() => (t.value as any)?.revision, () => { void loadNumberingReadiness() }, { immediate: true })
+
+async function previewNumbering() {
+  if (!t.value) return
+  numberingBusy.value = true
+  numberingError.value = ''
+  try {
+    const readiness = await webApi().call<any>(`/tournaments/${t.value.id}/draw-readiness`)
+    numberingReadiness.value = readiness
+    if (!readiness.ready) {
+      const pending = [...(readiness.pendingWeighIns ?? []), ...(readiness.undrawnCategories ?? [])]
+      numberingError.value = pending.length
+          ? `وزن‌کشی یا قرعهٔ این وزن‌ها کامل نیست: ${pending.join('، ')}`
+          : 'ابتدا وزن‌کشی و قرعهٔ همهٔ وزن‌ها را کامل کنید.'
+      return
+    }
+    numberingPreview.value = await webApi().call(`/tournaments/${t.value.id}/numbering/preview`, 'POST')
+  } catch (error: any) {
+    numberingError.value = error?.message || 'پیش‌نمایش شماره‌گذاری ناموفق بود'
+  } finally {
+    numberingBusy.value = false
+  }
+}
+
+async function applyNumbering() {
+  if (!t.value) return
+  numberingBusy.value = true
+  numberingError.value = ''
+  try {
+    await webApi().call(`/tournaments/${t.value.id}/numbering`, 'POST')
+    await store.refreshFromServer(t.value.id)
+    numberingPreview.value = null
+  } catch (error: any) {
+    numberingError.value = error?.message || 'ثبت شماره‌های بازی ناموفق بود'
+  } finally {
+    numberingBusy.value = false
+  }
+}
 
 // ─── ثابت‌ها ───────────────────────────────────────────────────────────────
 
 const COURT_LABELS = ['A', 'B', 'C', 'D', 'E', 'F']
 const courtLabel = (n: number) => COURT_LABELS[n - 1] ?? String(n)
+const numberingCourts = computed(() => Array.from({ length: t.value?.courts ?? 0 }, (_, index) => {
+  const court = index + 1
+  const courtMatches = (numberingPreview.value?.matches ?? [])
+      .filter((match: Match) => match.court === court && !match.isBye)
+      .sort((a: Match, b: Match) => a.order - b.order)
+  return { court, matches: courtMatches }
+}))
 
 const ROUND_NAMES: Record<number, string> = {
   1: 'فینال',
@@ -418,6 +479,12 @@ function doTextSwap() {
     <!-- ══════════════ تب زمان‌بندی زمین‌ها ══════════════ -->
     <template v-else-if="activeTab === 'schedule'">
 
+      <div class="flex flex-wrap items-center gap-3 rounded-xl border border-indigo-100 bg-indigo-50 p-4">
+        <div class="min-w-0 flex-1"><div class="text-sm font-bold text-indigo-950">تخصیص زمین و شماره‌گذاری</div><div class="mt-1 text-xs text-indigo-700">پیش‌نمایش صف هر زمین را ببینید و بعد شماره‌ها را ثبت کنید. تنظیم سایز هوگو در تنظیمات مسابقه است.</div></div>
+        <button :disabled="numberingBusy||!numberingReadiness?.ready" class="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-bold text-white disabled:opacity-50" @click="previewNumbering">{{numberingBusy?'در حال آماده‌سازی…':numberingReadiness?.ready?'پیش‌نمایش شماره‌گذاری':'پس از تکمیل قرعهٔ همهٔ وزن‌ها'}}</button>
+        <p v-if="numberingError" class="w-full rounded-lg bg-rose-100 px-3 py-2 text-xs text-rose-800">{{numberingError}}</p>
+      </div>
+
       <!-- راهنمای click-to-swap -->
       <div class="bg-white border border-slate-200 rounded-2xl px-4 py-3 shadow-sm flex items-center gap-3">
         <span class="text-slate-400 text-lg leading-none">⇄</span>
@@ -585,6 +652,17 @@ function doTextSwap() {
       </div>
     </template>
 
+  </div>
+
+  <div v-if="numberingPreview" class="fixed inset-0 z-[70] grid place-items-center bg-slate-950/50 p-4" @click.self="numberingPreview=null">
+    <section class="max-h-[90vh] w-full max-w-4xl overflow-auto rounded-2xl bg-white p-5 shadow-2xl" dir="rtl">
+      <div class="flex items-start justify-between gap-3"><div><h3 class="text-lg font-black text-slate-900">پیش‌نمایش صف و شمارهٔ زمین‌ها</h3><p class="mt-1 text-sm text-slate-500">شماره‌ها مطابق ترتیب اجرای هر زمین و تقدم مراحل براکت ساخته شده‌اند.</p></div><button class="rounded-lg px-3 py-1 text-slate-500 hover:bg-slate-100" @click="numberingPreview=null">بستن</button></div>
+      <div class="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        <article v-for="court in numberingCourts" :key="court.court" class="rounded-xl border border-slate-200 p-3"><h4 class="mb-2 font-bold">زمین {{courtLabel(court.court)}}</h4><ol class="space-y-1 text-xs"><li v-for="match in court.matches" :key="match.id" class="flex gap-2 border-b border-slate-100 py-1"><b class="shrink-0">{{match.matchNumber}}</b><span>وزن {{match.weightCategory}} · {{athleteDisplayName(match.athlete1Id,match.id,1)}} / {{athleteDisplayName(match.athlete2Id,match.id,2)}}</span></li></ol><p v-if="!court.matches.length" class="text-xs text-slate-400">بازی ندارد</p></article>
+      </div>
+      <p v-if="numberingError" class="mt-3 rounded-lg bg-rose-50 p-3 text-sm text-rose-700">{{numberingError}}</p>
+      <div class="mt-5 flex justify-end gap-2"><button :disabled="numberingBusy" class="rounded-lg border px-4 py-2 text-sm" @click="numberingPreview=null">لغو</button><button :disabled="numberingBusy" class="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-bold text-white disabled:opacity-50" @click="applyNumbering">{{numberingBusy?'در حال ثبت…':'تأیید و ثبت شماره‌ها'}}</button></div>
+    </section>
   </div>
 
   <!-- نوار شناور انتخاب بازی برای جابجایی -->

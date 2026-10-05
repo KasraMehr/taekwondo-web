@@ -49,7 +49,12 @@ func (s *tournamentService) DrawBracket(
 	}
 
 	normalizeTournamentCollections(tournament)
-	if strings.TrimSpace(drawType)=="" { normalizedDrawType,err=normalizeBracketDrawType(settingsFor(tournament).Draw.Type);if err!=nil{return nil,err} }
+	if strings.TrimSpace(drawType) == "" {
+		normalizedDrawType, err = normalizeBracketDrawType(settingsFor(tournament).Draw.Type)
+		if err != nil {
+			return nil, err
+		}
+	}
 
 	if tournament.Courts <= 0 {
 		return nil, fmt.Errorf(
@@ -115,7 +120,9 @@ func (s *tournamentService) DrawBracket(
 
 	tournament.Matches = matches
 	tournament.CourtAssignment = courtAssignment
-	applyCourtPlan(tournament)
+	if err := applyCourtPlan(tournament); err != nil {
+		return nil, err
+	}
 	tournament.UpdatedAt = time.Now().UTC()
 
 	if err := s.repository.Update(ctx, tournament); err != nil {
@@ -176,7 +183,12 @@ func (s *tournamentService) DrawBracketForCategory(
 	}
 
 	normalizeTournamentCollections(tournament)
-	if strings.TrimSpace(drawType)=="" { normalizedDrawType,err=normalizeBracketDrawType(settingsFor(tournament).Draw.Type);if err!=nil{return nil,err} }
+	if strings.TrimSpace(drawType) == "" {
+		normalizedDrawType, err = normalizeBracketDrawType(settingsFor(tournament).Draw.Type)
+		if err != nil {
+			return nil, err
+		}
+	}
 
 	if tournament.Courts <= 0 {
 		return nil, fmt.Errorf(
@@ -259,7 +271,9 @@ func (s *tournamentService) DrawBracketForCategory(
 	}
 
 	tournament.CourtAssignment[weightCategory] = categoryCourts
-	applyCourtPlan(tournament)
+	if err := applyCourtPlan(tournament); err != nil {
+		return nil, err
+	}
 	tournament.UpdatedAt = time.Now().UTC()
 
 	if err := s.repository.Update(ctx, tournament); err != nil {

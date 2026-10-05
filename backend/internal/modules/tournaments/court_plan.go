@@ -2,9 +2,11 @@ package tournaments
 
 import (
 	"context"
+	"fmt"
 	"golang.org/x/text/collate"
 	"golang.org/x/text/language"
 	"sort"
+	"strings"
 	"time"
 )
 
@@ -253,7 +255,9 @@ func (s *tournamentService) RebalanceCourts(ctx context.Context, id string) (*To
 		return nil, ErrMatchLocked
 	}
 	clearMatchNumbers(t)
-	applyCourtPlan(t)
+	if err := applyCourtPlan(t); err != nil {
+		return nil, err
+	}
 	t.UpdatedAt = time.Now().UTC()
 	if err = s.repository.Update(ctx, t); err != nil {
 		return nil, err
@@ -261,7 +265,7 @@ func (s *tournamentService) RebalanceCourts(ctx context.Context, id string) (*To
 	return t, nil
 }
 
-func applyCourtPlan(t *Tournament) {
+func applyCourtPlan(t *Tournament) error {
 	assignment := map[string][]int{}
 	for _, day := range settingsFor(t).Schedule.Days {
 		subset := *t
@@ -275,6 +279,9 @@ func applyCourtPlan(t *Tournament) {
 			}
 		}
 		applyCourtPlanSingleDay(&subset)
+		if err := applyHoguCourtPlan(&subset); err != nil {
+			return err
+		}
 		for i, index := range indices {
 			t.Matches[index] = subset.Matches[i]
 		}
@@ -283,4 +290,97 @@ func applyCourtPlan(t *Tournament) {
 		}
 	}
 	t.CourtAssignment = assignment
+	return nil
+}
+
+// Keep each weight category on courts carrying its required protector size.
+func applyHoguCourtPlan(t *Tournament) error {
+	hogu := settingsFor(t).Hogu
+	if !hogu.Enabled {
+		return nil
+	}
+	loads := make([]int, t.Courts+1)
+	categories := make([]string, 0, len(t.CourtAssignment))
+	for category := range t.CourtAssignment {
+		categories = append(categories, category)
+	}
+	sort.Strings(categories)
+	for _, category := range categories {
+		size := strings.TrimSpace(hogu.CategorySizes[category])
+		if size == "" {
+			continue
+		}
+		compatible := []int{}
+		for court := 1; court <= t.Courts; court++ {
+			for _, available := range hogu.CourtSizes[court] {
+				if strings.TrimSpace(available) == size {
+					compatible = append(compatible, court)
+					break
+				}
+			}
+		}
+		if len(compatible) == 0 {
+			return fmt.Errorf("%w: no court has hogu size %s required for category %s", ErrInvalidTournamentInput, size, category)
+		}
+		moved := map[string]int{}
+		for _, match := range t.Matches {
+			if match.WeightCategory == category && match.MovedAt != nil && !lifecycleIsBye(&match) {
+				if !containsInt(compatible, match.Court) {
+					return fmt.Errorf("%w: manually moved match in category %s is on a court without hogu size %s", ErrInvalidTournamentInput, category, size)
+				}
+				moved[match.ID] = match.Court
+			}
+		}
+		if assigned := t.CourtAssignment[category]; len(assigned) > 0 {
+			kept := []int{}
+			for _, court := range assigned {
+				if containsInt(compatible, court) {
+					kept = append(kept, court)
+				}
+			}
+			if len(kept) > 0 {
+				compatible = kept
+			}
+		}
+		sort.SliceStable(compatible, func(i, j int) bool {
+			if loads[compatible[i]] == loads[compatible[j]] {
+				return compatible[i] < compatible[j]
+			}
+			return loads[compatible[i]] < loads[compatible[j]]
+		})
+		if len(compatible) > 2 {
+			compatible = compatible[:2]
+		}
+		assignCategoryCourts(t.Matches, category, compatible)
+		for i := range t.Matches {
+			if court, ok := moved[t.Matches[i].ID]; ok {
+				t.Matches[i].Court = court
+			}
+		}
+		used := []int{}
+		for _, m := range t.Matches {
+			if m.WeightCategory == category && !lifecycleIsBye(&m) && m.Court > 0 {
+				loads[m.Court]++
+				if !containsInt(used, m.Court) {
+					used = append(used, m.Court)
+				}
+			}
+		}
+		t.CourtAssignment[category] = used
+	}
+	if settingsFor(t).Numbering.Order == "category" {
+		syncCategoryOrders(t)
+	} else {
+		syncMatchOrders(t.Matches)
+	}
+	return nil
+}
+
+func containsInt(values []int, value int) bool {
+	for _, item := range values {
+		if item == value {
+			return true
+		}
+	}
+	return false
 }

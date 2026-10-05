@@ -377,6 +377,7 @@ type AthleteLike = {
   name?: string | null
   fullName?: string | null
   club?: string | null
+  coach?: string | null
 }
 
 type BracketColumn = {
@@ -1088,7 +1089,7 @@ const MatchBox = defineComponent({
 
       const findAthlete = (
           id: string | null | undefined
-      ): { name: string; club: string } => {
+      ): { name: string; club: string; coach?: string } => {
         if (!id) {
           return {
             name: '-',
@@ -1108,6 +1109,7 @@ const MatchBox = defineComponent({
           club:
               athlete?.club ??
               '',
+          coach: athlete?.coach?.trim() ?? '',
         }
       }
 
@@ -1203,7 +1205,7 @@ const MatchBox = defineComponent({
       }
 
       const renderSlot = (
-          info: { name: string; club: string },
+          info: { name: string; club: string; coach?: string },
           id: string | null,
           isWinner: boolean,
           color: 'blue' | 'red',
@@ -1211,6 +1213,7 @@ const MatchBox = defineComponent({
       ) => {
         const isEmpty = !id
         const byeWin = isWinner && byeMatch
+        const affiliation = info.club
 
         return h(
             'div',
@@ -1218,22 +1221,22 @@ const MatchBox = defineComponent({
             [
               !isEmpty ? colorMarker(color) : null,
 
-              h('div', { class: 'min-w-0 flex-1' }, [
+              h('div', { class: 'athlete-details min-w-0 flex-1' }, [
                 h(
                     'div',
                     {
                       class: isEmpty
                           ? 'truncate text-[10px] font-bold opacity-60'
-                          : 'truncate font-bold',
+                          : 'athlete-name truncate font-bold',
                     },
                     slotText(id, placeholder)
                 ),
 
-                !isEmpty && info.club
+                !isEmpty && affiliation
                     ? h(
                         'div',
-                        { class: 'truncate text-[9px] font-medium opacity-60' },
-                        info.club
+                        { class: 'athlete-affiliation truncate', title: affiliation },
+                        affiliation
                     )
                     : null,
               ]),
@@ -1856,6 +1859,14 @@ onUnmounted(() => window.removeEventListener('beforeprint', fitBracketsToPage));
   display: flex;
   align-items: center;
   min-height: var(--slot-height);
+}
+
+.athlete-affiliation {
+  margin-top: 2px;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.35;
+  color: #334155;
 }
 
 .empty-slot {
@@ -2544,12 +2555,24 @@ onUnmounted(() => window.removeEventListener('beforeprint', fitBracketsToPage));
     max-width: 100% !important;
   }
 
-  .bracket-stage .athlete-slot small {
-    padding-top: 2px;
+  .bracket-stage .athlete-details {
+    flex: 0 0 auto !important;
+    width: 100% !important;
+    min-width: 0 !important;
+  }
+
+  .bracket-stage .athlete-name {
+    line-height: 1.3 !important;
+  }
+
+  .bracket-stage .athlete-affiliation {
+    margin-top: 2px !important;
     display: block !important;
-    font-size: 7.5pt !important;
-    line-height: 1.15 !important;
-    color: #444 !important;
+    font-size: 10pt !important;
+    font-weight: 600 !important;
+    line-height: 1.3 !important;
+    color: #222 !important;
+    opacity: 1 !important;
     text-align: center !important;
     width: 100% !important;
   }

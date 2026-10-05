@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"math"
 	"reflect"
+	"strings"
 	"time"
 )
 
@@ -15,6 +16,14 @@ type TournamentSettings struct {
 	Draw      DrawSettings      `json:"draw"`
 	Schedule  ScheduleSettings  `json:"schedule"`
 	Numbering NumberingSettings `json:"numbering"`
+	Hogu      HoguSettings      `json:"hogu"`
+}
+
+// HoguSettings map required electronic protector sizes to the courts equipped for them.
+type HoguSettings struct {
+	Enabled       bool              `json:"enabled"`
+	CourtSizes    map[int][]string  `json:"courtSizes"`
+	CategorySizes map[string]string `json:"categorySizes"`
 }
 
 type ScoringSettings struct {
@@ -66,6 +75,7 @@ func DefaultSettings(date time.Time) TournamentSettings {
 		Draw:      DrawSettings{Type: "random", SeparateTeams: true},
 		Schedule:  ScheduleSettings{Mode: "balanced", SingleCourt: 1, FinalCourtPolicy: "primary", FinalCourt: 1, DayAssignment: "manual", Days: []EventDay{{Day: 1, Date: date.Format("2006-01-02"), Label: "روز اول"}}, CategoryDays: map[string]int{}},
 		Numbering: NumberingSettings{StartAt: 1, Scope: "tournament", Order: "rounds"},
+		Hogu:      HoguSettings{CourtSizes: map[int][]string{}, CategorySizes: map[string]string{}},
 	}
 }
 func settingsFor(t *Tournament) TournamentSettings {
@@ -81,6 +91,15 @@ func dayForCategory(t *Tournament, category string) int {
 	}
 	return day
 }
+func validHoguSize(size string) bool {
+	switch size {
+	case "1", "2", "3", "4":
+		return true
+	default:
+		return false
+	}
+}
+
 func validateSettings(t *Tournament, s TournamentSettings) error {
 	invalid := func(message string) error { return fmt.Errorf("%w: %s", ErrInvalidTournamentInput, message) }
 	if s.Scoring.PointGap < 1 || s.Scoring.PointGap > 1000 || s.Scoring.PointGapFromRound < 1 || s.Scoring.PointGapFromRound > s.Scoring.MaxRounds || s.Scoring.GamJeomLimitPerRound < 1 || s.Scoring.GamJeomLimitPerRound > 100 || s.Scoring.RoundsToWin < 1 || s.Scoring.RoundsToWin > 5 || s.Scoring.MaxRounds != 2*s.Scoring.RoundsToWin-1 {
@@ -116,6 +135,34 @@ func validateSettings(t *Tournament, s TournamentSettings) error {
 	}
 	if s.Numbering.Order != "rounds" && s.Numbering.Order != "category" {
 		return invalid("numbering order must be rounds or category")
+	}
+	if s.Hogu.Enabled {
+		for court := 1; court <= t.Courts; court++ {
+			if len(s.Hogu.CourtSizes[court]) == 0 {
+				return invalid(fmt.Sprintf("choose at least one hogu size for court %d", court))
+			}
+			seen := map[string]bool{}
+			for _, size := range s.Hogu.CourtSizes[court] {
+				size = strings.TrimSpace(size)
+				if !validHoguSize(size) || seen[size] {
+					return invalid(fmt.Sprintf("invalid or repeated hogu size on court %d (allowed sizes: 1–4)", court))
+				}
+				seen[size] = true
+			}
+		}
+		for category, size := range s.Hogu.CategorySizes {
+			if !IsValidWeightCategory(t.AgeCategory, t.Gender, category) || !validHoguSize(strings.TrimSpace(size)) {
+				return invalid("invalid category hogu size (allowed sizes: 1–4)")
+			}
+		}
+		for _, match := range t.Matches {
+			if lifecycleIsBye(&match) {
+				continue
+			}
+			if strings.TrimSpace(s.Hogu.CategorySizes[match.WeightCategory]) == "" {
+				return invalid(fmt.Sprintf("choose a hogu size for category %s", match.WeightCategory))
+			}
+		}
 	}
 	if s.WeighIn.MaxAttempts < 1 || s.WeighIn.MaxAttempts > 10 {
 		return invalid("weigh-in maxAttempts must be 1–10")
@@ -178,7 +225,7 @@ func (s *tournamentService) UpdateSettings(ctx context.Context, id string, input
 	if hasStartedMatches(t) && old.Scoring != input.Scoring {
 		return nil, ErrMatchLocked
 	}
-	if hasStartedMatches(t) && (!reflect.DeepEqual(old.Schedule, input.Schedule) || old.Numbering != input.Numbering || old.Draw != input.Draw) {
+	if hasStartedMatches(t) && (!reflect.DeepEqual(old.Schedule, input.Schedule) || old.Numbering != input.Numbering || old.Draw != input.Draw || !reflect.DeepEqual(old.Hogu, input.Hogu)) {
 		return nil, ErrMatchLocked
 	}
 	if old.WeighIn != input.WeighIn {
@@ -216,7 +263,9 @@ func (s *tournamentService) UpdateSettings(ctx context.Context, id string, input
 	for i := range t.Matches {
 		t.Matches[i].Day = dayForCategory(t, t.Matches[i].WeightCategory)
 	}
-	applyCourtPlan(t)
+	if err = applyCourtPlan(t); err != nil {
+		return nil, err
+	}
 	t.UpdatedAt = time.Now().UTC()
 	if err = s.repository.Update(ctx, t); err != nil {
 		return nil, err

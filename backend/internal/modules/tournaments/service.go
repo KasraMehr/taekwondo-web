@@ -626,7 +626,9 @@ func (s *tournamentService) Update(
 	}
 	if !hasStartedMatches(tournament) {
 		clearMatchNumbers(tournament)
-		applyCourtPlan(tournament)
+		if err := applyCourtPlan(tournament); err != nil {
+			return nil, err
+		}
 	}
 	normalizeTournamentCollections(tournament)
 

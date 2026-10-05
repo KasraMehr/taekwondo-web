@@ -75,7 +75,9 @@ func (s *tournamentService) NumberMatches(ctx context.Context, id string, previe
 		return nil, fmt.Errorf("%w: numbering is locked after the first match starts", ErrMatchLocked)
 	}
 	clearMatchNumbers(t)
-	applyCourtPlan(t)
+	if err = applyCourtPlan(t); err != nil {
+		return nil, err
+	}
 	if err = assignMatchNumbers(t); err != nil {
 		return nil, err
 	}

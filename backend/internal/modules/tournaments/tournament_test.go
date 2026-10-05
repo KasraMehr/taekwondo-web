@@ -263,8 +263,20 @@ func TestSettingsTwoDaysAndNumberingModes(t *testing.T) {
 			if _, err := s.DrawBracketForCategory(context.Background(), id, "-54", "ranking"); err != nil {
 				t.Fatal(err)
 			}
+			beforeNumbering := r.writes
+			if _, err := s.NumberMatches(context.Background(), id, true); !errors.Is(err, ErrMatchLocked) {
+				t.Fatalf("previewed numbering before all categories were drawn: %v", err)
+			}
 			if _, err := s.NumberMatches(context.Background(), id, false); !errors.Is(err, ErrMatchLocked) {
-				t.Fatalf("numbered incomplete draw: %v", err)
+				t.Fatalf("numbered before all categories were drawn: %v", err)
+			}
+			if r.writes != beforeNumbering {
+				t.Fatal("incomplete draw wrote match numbers")
+			}
+			for _, match := range r.value.Matches {
+				if match.MatchNumber != nil {
+					t.Fatal("incomplete draw received a match number")
+				}
 			}
 			for _, cat := range []string{"-58", "-63", "-68"} {
 				if _, err := s.DrawBracketForCategory(context.Background(), id, cat, "ranking"); err != nil {
@@ -361,6 +373,37 @@ func TestNumberingSettingsAndLocks(t *testing.T) {
 	settings.Numbering.StartAt = 1
 	if _, err = s.UpdateSettings(context.Background(), id, settings); !errors.Is(err, ErrMatchLocked) {
 		t.Fatal("changed live schedule")
+	}
+}
+
+func TestHoguSizesRestrictCourtAssignmentAndNumbering(t *testing.T) {
+	s, r, id := newFixture(t)
+	enter(t, s, id, "-54", 4)
+	if _, err := s.DrawBracket(context.Background(), id, "ranking"); err != nil {
+		t.Fatal(err)
+	}
+	settings := *r.value.Settings
+	settings.Hogu = HoguSettings{
+		Enabled:       true,
+		CourtSizes:    map[int][]string{1: {"1"}, 2: {"2"}, 3: {"1"}, 4: {"1"}},
+		CategorySizes: map[string]string{"-54": "2"},
+	}
+	if _, err := s.UpdateSettings(context.Background(), id, settings); err != nil {
+		t.Fatal(err)
+	}
+	preview, err := s.NumberMatches(context.Background(), id, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, match := range preview.Matches {
+		if !lifecycleIsBye(&match) && match.Court != 2 {
+			t.Fatalf("size-2 category assigned to court %d", match.Court)
+		}
+	}
+	settings = *r.value.Settings
+	settings.Hogu.CourtSizes = map[int][]string{1: {"1"}, 2: {"1"}, 3: {"1"}, 4: {"1"}}
+	if _, err := s.UpdateSettings(context.Background(), id, settings); err == nil {
+		t.Fatal("expected rejection when no court carries the required size")
 	}
 }
 func TestScoringRejectsForgedWinnerAndPropagates(t *testing.T) {
