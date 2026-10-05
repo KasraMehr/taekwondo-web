@@ -141,6 +141,12 @@ func (a *API) tournamentRoutes(org *gin.RouterGroup) {
 		}
 		return r.Service().ClearWeighInSignature(r.Context(), r.C.Param("tournament"), r.C.Param("entry"))
 	}))
+	group.POST("/:tournament/weigh-in/approve-all", a.route(true, true, func(r *Request) (any, error) {
+		if err := r.authorizeTournament(permWeighInManage, r.C.Param("tournament")); err != nil {
+			return nil, err
+		}
+		return r.Service().ApproveAllWeighIns(r.Context(), r.C.Param("tournament"))
+	}))
 	type drawInput struct {
 		Type           string `json:"type"`
 		WeightCategory string `json:"weightCategory"`

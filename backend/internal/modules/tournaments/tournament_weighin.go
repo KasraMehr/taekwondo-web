@@ -57,6 +57,47 @@ type weighInEvaluation struct {
 	limitIsMinimum   bool
 }
 
+// ApproveAllWeighIns marks every registered athlete as passed without
+// fabricating a scale reading. It is intended for events where the head
+// referee has approved the complete roster outside the individual workflow.
+func (s *tournamentService) ApproveAllWeighIns(ctx context.Context, tournamentID string) (*Tournament, error) {
+	if s == nil || s.repository == nil {
+		return nil, fmt.Errorf("%w: tournament repository is nil", ErrInvalidTournamentInput)
+	}
+	tournament, err := s.repository.GetByID(ctx, tournamentID)
+	if err != nil {
+		return nil, fmt.Errorf("get tournament %s before bulk weigh-in approval: %w", tournamentID, err)
+	}
+	if tournament == nil {
+		return nil, ErrTournamentNotFound
+	}
+	normalizeTournamentCollections(tournament)
+	if len(tournament.Matches) > 0 {
+		return nil, fmt.Errorf("%w: reset brackets before approving all weigh-ins", ErrBracketAlreadyDrawn)
+	}
+	changed := false
+	for i := range tournament.Athletes {
+		athlete := &tournament.Athletes[i]
+		if err := validateWeighInAthleteCategory(tournament, *athlete); err != nil {
+			return nil, err
+		}
+		if athlete.WeighIn.Status == WeighInPassed {
+			continue
+		}
+		athlete.WeighIn.Status = WeighInPassed
+		athlete.WeighedIn = true
+		changed = true
+	}
+	if !changed {
+		return tournament, nil
+	}
+	tournament.UpdatedAt = time.Now().UTC()
+	if err := s.repository.Update(ctx, tournament); err != nil {
+		return nil, fmt.Errorf("update tournament %s after bulk weigh-in approval: %w", tournamentID, err)
+	}
+	return tournament, nil
+}
+
 // PreviewWeighIn وزن را بررسی می‌کند، اما چیزی در دیتابیس ذخیره نمی‌کند.
 func (s *tournamentService) PreviewWeighIn(
 	ctx context.Context,

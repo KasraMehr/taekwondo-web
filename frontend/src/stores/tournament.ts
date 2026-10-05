@@ -1375,6 +1375,21 @@ export const useTournamentStore = defineStore("tournament", () => {
         return {}
     }
 
+    async function approveAllWeighIns(tournamentId: string): Promise<{ count: number; error?: string }> {
+        const tournament = tournaments.value.find(item => item.id === tournamentId)
+        if (!tournament) return { count: 0, error: 'مسابقه یافت نشد' }
+        if (tournament.matches.length) return { count: 0, error: 'برای تأیید گروهی ابتدا براکت‌های مسابقه را پاک کنید' }
+        const count = tournament.athletes.filter(athlete => athlete.weighIn?.status !== 'passed').length
+        if (!count) return { count: 0 }
+        try {
+            const updated = await webApi().call<Tournament>(`/tournaments/${tournamentId}/weigh-in/approve-all`, 'POST')
+            replaceFromServer(updated)
+            return { count }
+        } catch (error: any) {
+            return { count: 0, error: error?.message || 'تأیید گروهی وزن‌کشی ناموفق بود' }
+        }
+    }
+
     /** آمار وزن‌کشی مسابقه جاری، به تفکیک دسته وزنی */
     const weighInStats = computed(() => {
         const t = currentTournament.value
@@ -1508,6 +1523,7 @@ export const useTournamentStore = defineStore("tournament", () => {
         resetWeighIn,
         resetCategoryBracketAndWeighIns,
         clearWeighInSignature,
+        approveAllWeighIns,
         isCategoryWeighInComplete,
         weighInStats,
         eligibleAthletes,

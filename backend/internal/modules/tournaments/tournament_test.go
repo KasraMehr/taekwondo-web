@@ -147,6 +147,36 @@ func TestWeighInAttemptsResetAndSignature(t *testing.T) {
 	}
 }
 
+func TestApproveAllWeighIns(t *testing.T) {
+	s, r, id := newFixture(t)
+	for _, name := range []string{"A", "B"} {
+		if _, err := s.AddAthlete(context.Background(), id, AddAthleteInput{Name: name, WeightCategory: "-58"}); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	got, err := s.ApproveAllWeighIns(context.Background(), id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, athlete := range got.Athletes {
+		if athlete.WeighIn == nil || athlete.WeighIn.Status != WeighInPassed {
+			t.Fatalf("athlete %s was not approved: %+v", athlete.Name, athlete.WeighIn)
+		}
+		if athlete.WeighIn.WeightKg != nil || len(athlete.WeighIn.Attempts) != 0 {
+			t.Fatalf("bulk approval must not fabricate a measured weight: %+v", athlete.WeighIn)
+		}
+	}
+
+	if _, err = s.DrawBracketForCategory(context.Background(), id, "-58", "random"); err != nil {
+		t.Fatal(err)
+	}
+	before := r.writes
+	if _, err = s.ApproveAllWeighIns(context.Background(), id); !errors.Is(err, ErrBracketAlreadyDrawn) || r.writes != before {
+		t.Fatalf("bulk approval after draw: err=%v writes=%d want=%d", err, r.writes, before)
+	}
+}
+
 func TestLinkedProfileIdentityAndIsolation(t *testing.T) {
 	s, r, id := newFixture(t)
 	profileID := uuid.NewString()
