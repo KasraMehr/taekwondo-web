@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"math"
 	"reflect"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -97,6 +98,37 @@ func validHoguSize(size string) bool {
 		return true
 	default:
 		return false
+	}
+}
+
+// defaultHoguSizeForCategory provides a practical default from the weight limit.
+// Organizers can still override exceptional categories in tournament settings.
+func defaultHoguSizeForCategory(category string) string {
+	value := strings.TrimSpace(strings.TrimLeft(category, "+-"))
+	weight, err := strconv.Atoi(value)
+	if err != nil {
+		return ""
+	}
+	switch {
+	case weight <= 40:
+		return "1"
+	case weight <= 55:
+		return "2"
+	case weight <= 70:
+		return "3"
+	default:
+		return "4"
+	}
+}
+
+func applyDefaultHoguSizes(t *Tournament, hogu *HoguSettings) {
+	if hogu.CategorySizes == nil {
+		hogu.CategorySizes = map[string]string{}
+	}
+	for _, category := range WeightOptions(t.AgeCategory, t.Gender) {
+		if !validHoguSize(strings.TrimSpace(hogu.CategorySizes[category])) {
+			hogu.CategorySizes[category] = defaultHoguSizeForCategory(category)
+		}
 	}
 }
 
@@ -215,6 +247,7 @@ func (s *tournamentService) UpdateSettings(ctx context.Context, id string, input
 			input.Schedule.CategoryDays[cat] = i%2 + 1
 		}
 	}
+	applyDefaultHoguSizes(t, &input.Hogu)
 	if err = validateSettings(t, input); err != nil {
 		return nil, err
 	}
