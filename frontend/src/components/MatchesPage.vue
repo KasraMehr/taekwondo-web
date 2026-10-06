@@ -15,6 +15,40 @@ const numberingPreview = ref<any | null>(null)
 const numberingBusy = ref(false)
 const numberingError = ref('')
 const numberingReadiness = ref<any | null>(null)
+const rebalanceBusy = ref(false)
+const rebalanceMessage = ref('')
+const rebalanceError = ref('')
+
+const canRebalanceCurrentDraw = computed(() =>
+  Boolean(t.value?.matches.length) &&
+  !matches.value.some(match =>
+    !match.isBye && Boolean(match.winnerId || match.result || match.status === 'ongoing')
+  )
+)
+
+async function rebalanceCurrentDraw() {
+  if (!t.value || !canRebalanceCurrentDraw.value || rebalanceBusy.value) return
+  const accepted = window.confirm(
+    'قرعه و حریف‌ها حفظ می‌شوند، اما تخصیص دستی زمین‌ها و شماره‌های فعلی بازی‌ها دوباره محاسبه خواهند شد. ادامه می‌دهید؟'
+  )
+  if (!accepted) return
+
+  const tournamentId = t.value.id
+  rebalanceBusy.value = true
+  rebalanceMessage.value = ''
+  rebalanceError.value = ''
+  try {
+    await webApi().call(`/tournaments/${tournamentId}/rebalance`, 'POST')
+    await store.refreshFromServer(tournamentId)
+    numberingPreview.value = null
+    selectedMatchId.value = null
+    rebalanceMessage.value = 'بازی‌های قرعهٔ فعلی دوباره بین زمین‌ها توزیع شدند. برای ثبت شماره‌های جدید، شماره‌گذاری را اجرا کنید.'
+  } catch (error: any) {
+    rebalanceError.value = error?.message || 'توزیع مجدد بازی‌ها ناموفق بود'
+  } finally {
+    rebalanceBusy.value = false
+  }
+}
 
 async function loadNumberingReadiness() {
   if (!t.value) return
@@ -321,6 +355,34 @@ function doTextSwap() {
           :class="activeTab === 'schedule' ? 'bg-white shadow text-slate-800' : 'text-slate-500 hover:text-slate-700'"
           @click="activeTab = 'schedule'"
       >زمان‌بندی زمین‌ها</button>
+    </div>
+
+    <div class="rounded-2xl border border-sky-200 bg-sky-50 p-4 shadow-sm">
+      <div class="flex flex-wrap items-center gap-3">
+        <div class="min-w-0 flex-1">
+          <div class="text-sm font-bold text-sky-950">توزیع دوباره روی زمین‌ها</div>
+          <div class="mt-1 text-xs leading-5 text-sky-700">
+            قرعه و حریف‌ها ثابت می‌مانند؛ فقط زمین، ترتیب اجرا و شماره‌های بازی دوباره محاسبه می‌شوند.
+          </div>
+        </div>
+        <button
+            :disabled="rebalanceBusy || !canRebalanceCurrentDraw"
+            class="rounded-xl bg-sky-600 px-4 py-2 text-sm font-bold text-white shadow-sm transition-colors hover:bg-sky-700 disabled:cursor-not-allowed disabled:opacity-50"
+            :title="canRebalanceCurrentDraw ? 'توزیع مجدد براساس قرعه فعلی' : 'پس از شروع یا ثبت نتیجهٔ بازی‌ها امکان توزیع مجدد وجود ندارد'"
+            @click="rebalanceCurrentDraw"
+        >
+          {{ rebalanceBusy ? 'در حال توزیع…' : 'توزیع مجدد بازی‌ها' }}
+        </button>
+      </div>
+      <p v-if="!canRebalanceCurrentDraw" class="mt-2 text-xs text-amber-700">
+        چون حداقل یک بازی شروع شده یا نتیجه دارد، توزیع مجدد قفل است.
+      </p>
+      <p v-if="rebalanceMessage" class="mt-2 rounded-lg bg-emerald-100 px-3 py-2 text-xs text-emerald-800">
+        ✓ {{ rebalanceMessage }}
+      </p>
+      <p v-if="rebalanceError" class="mt-2 rounded-lg bg-rose-100 px-3 py-2 text-xs text-rose-800">
+        {{ rebalanceError }}
+      </p>
     </div>
 
     <!-- ══════════════ تب دسته‌بندی‌ها ══════════════ -->
