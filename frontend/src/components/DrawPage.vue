@@ -93,7 +93,7 @@
     <transition name="fade">
       <div v-if="swapMode"
            class="text-center text-sm text-amber-800 bg-amber-50 border border-amber-200 rounded-2xl py-3 px-5 mb-6 max-w-lg mx-auto shadow-sm">
-        روی دو بازیکن در <b>دور اول</b> (یک وزن) کلیک کنید تا جابه‌جا شوند.
+        روی دو بازیکن در <b>دور اول</b> (یک وزن) کلیک کنید تا جابه‌جا شوند؛ بازیکنان دارای استراحت هم قابل انتخاب‌اند.
       </div>
     </transition>
 

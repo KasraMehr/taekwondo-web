@@ -753,7 +753,7 @@ export const useTournamentStore = defineStore("tournament", () => {
         const mb = t.matches[idxB]
 
         if (ma.round !== 1 || mb.round !== 1) return
-        if (ma.winnerId || mb.winnerId) return
+        if ((ma.winnerId && !ma.isBye) || (mb.winnerId && !mb.isBye)) return
         if (ma.weightCategory !== mb.weightCategory) return
 
         const keyA = a.slot === 1 ? 'athlete1Id' : 'athlete2Id'
@@ -788,7 +788,28 @@ export const useTournamentStore = defineStore("tournament", () => {
             t.matches[idxB] = { ...mb, [keyB]: valA }
         }
 
+        const refreshBye = (matchIndex: number) => {
+            const match = t.matches[matchIndex]
+            if (!match.isBye) return
+            const winnerId = match.athlete1Id ?? match.athlete2Id
+            if (!winnerId) return
+            match.winnerId = winnerId
+            const next = match.nextMatchId
+                ? t.matches.find((candidate) => candidate.id === match.nextMatchId)
+                : undefined
+            if (!next) return
+            if ((match.nextSlot ?? 'athlete1') === 'athlete2') next.athlete2Id = winnerId
+            else next.athlete1Id = winnerId
+        }
+        refreshBye(idxA)
+        if (idxA !== idxB) refreshBye(idxB)
+
         save()
+        remote(() => webApi().call(`/tournaments/${t.id}/matches/${a.matchId}/swap-athlete`, 'POST', {
+            slot: a.slot,
+            otherMatchId: b.matchId,
+            otherSlot: b.slot,
+        }), t.id)
     }
 
     // ─────────────────────── اکسپورت / ایمپورت اکسل ───────────────────────
