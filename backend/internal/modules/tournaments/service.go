@@ -229,7 +229,7 @@ type TournamentService interface {
 		ctx context.Context,
 		tournamentID string,
 		matchID string,
-		otherMatchID string,
+		input SwapAthletesInput,
 	) (*Tournament, error)
 
 	ResetRankings(
@@ -346,6 +346,12 @@ type ReassignMatchCourtInput struct {
 
 type SwapMatchPositionsInput struct {
 	OtherMatchID string `json:"otherMatchId"`
+}
+
+type SwapAthletesInput struct {
+	Slot         int    `json:"slot"`
+	OtherMatchID string `json:"otherMatchId"`
+	OtherSlot    int    `json:"otherSlot"`
 }
 
 func (s *tournamentService) Create(

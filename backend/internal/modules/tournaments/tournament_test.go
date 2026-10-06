@@ -252,6 +252,77 @@ func TestSeedOrderAndByes(t *testing.T) {
 		})
 	}
 }
+
+func TestSwapAthletesAllowsByeRecipient(t *testing.T) {
+	s, _, id := newFixture(t)
+	enter(t, s, id, "-54", 5)
+	drawn, err := s.DrawBracket(context.Background(), id, "ranking")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var byeMatch, playableMatch *Match
+	for i := range drawn.Matches {
+		match := &drawn.Matches[i]
+		if match.Round != 1 {
+			continue
+		}
+		if lifecycleIsBye(match) && byeMatch == nil {
+			byeMatch = match
+		}
+		if !lifecycleIsBye(match) && match.Athlete1ID != nil && match.Athlete2ID != nil && playableMatch == nil {
+			playableMatch = match
+		}
+	}
+	if byeMatch == nil || playableMatch == nil {
+		t.Fatal("expected both a bye and a playable first-round match")
+	}
+
+	byeSlot := 1
+	byeAthlete := byeMatch.Athlete1ID
+	if byeAthlete == nil {
+		byeSlot = 2
+		byeAthlete = byeMatch.Athlete2ID
+	}
+	playableAthlete := playableMatch.Athlete1ID
+	if byeAthlete == nil || playableAthlete == nil || byeMatch.NextMatchID == nil || byeMatch.NextSlot == nil {
+		t.Fatal("draw did not contain the expected bracket links")
+	}
+
+	updated, err := s.SwapAthletes(context.Background(), id, byeMatch.ID, SwapAthletesInput{
+		Slot:         byeSlot,
+		OtherMatchID: playableMatch.ID,
+		OtherSlot:    1,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	updatedBye := matchByID(t, updated.Matches, byeMatch.ID)
+	updatedPlayable := matchByID(t, updated.Matches, playableMatch.ID)
+	if updatedBye.WinnerID == nil || *updatedBye.WinnerID != *playableAthlete {
+		t.Fatalf("bye winner was not refreshed: %+v", updatedBye)
+	}
+	if swapped := athleteSwapSlot(updatedPlayable, 1); swapped == nil || *swapped == nil || **swapped != *byeAthlete {
+		t.Fatalf("bye recipient was not moved into the playable match: %+v", updatedPlayable)
+	}
+	next := matchByID(t, updated.Matches, *byeMatch.NextMatchID)
+	nextSlot, err := lifecycleSlotPointer(next, *byeMatch.NextSlot)
+	if err != nil || *nextSlot == nil || **nextSlot != *playableAthlete {
+		t.Fatalf("next round was not refreshed: slot=%v err=%v", nextSlot, err)
+	}
+}
+
+func matchByID(t *testing.T, matches []Match, id string) *Match {
+	t.Helper()
+	for i := range matches {
+		if matches[i].ID == id {
+			return &matches[i]
+		}
+	}
+	t.Fatalf("match %s not found", id)
+	return nil
+}
+
 func TestDrawUsesStructuredWeighInAndLocksEntries(t *testing.T) {
 	s, r, id := newFixture(t)
 	enter(t, s, id, "-54", 3)

@@ -74,7 +74,11 @@ function isWinner(slot: 1 | 2) { const id = athleteId(slot); return !!id && prop
 function isByeWin(slot: 1 | 2) { return isWinner(slot) && byeMatch.value }      // برنده‌ی بای
 function isRealWinner(slot: 1 | 2) { return isWinner(slot) && !byeMatch.value } // برنده‌ی واقعی
 
-const canSwap = computed(() => props.swapMode && props.match.round === 1 && !props.match.winnerId)
+const canSwap = computed(() =>
+  props.swapMode &&
+  props.match.round === 1 &&
+  (!props.match.winnerId || byeMatch.value)
+)
 function isSelected(slot: 1 | 2) {
   return props.selectedSlot?.matchId === props.match.id && props.selectedSlot?.slot === slot
 }

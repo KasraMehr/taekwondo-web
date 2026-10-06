@@ -3,6 +3,7 @@ package tournaments
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 )
 
@@ -659,20 +660,25 @@ func schedulingCopyMatch(match *Match) *Match {
 	return &result
 }
 
-// SwapAthletes exchanges both participants while preserving match positions.
+// SwapAthletes exchanges two first-round athlete slots while preserving the
+// bracket positions. Auto-completed bye winners are allowed and their
+// propagated participant in the next round is refreshed after the swap.
 func (s *tournamentService) SwapAthletes(
 	ctx context.Context,
 	tournamentID string,
 	matchID string,
-	otherMatchID string,
+	input SwapAthletesInput,
 ) (*Tournament, error) {
-	for _, id := range []string{matchID, otherMatchID} {
+	for _, id := range []string{matchID, input.OtherMatchID} {
 		if err := lifecycleValidateMatchID(id); err != nil {
 			return nil, err
 		}
 	}
-	if matchID == otherMatchID {
-		return nil, fmt.Errorf("%w: cannot swap a match with itself", ErrInvalidTournamentInput)
+	if (input.Slot != 1 && input.Slot != 2) || (input.OtherSlot != 1 && input.OtherSlot != 2) {
+		return nil, fmt.Errorf("%w: athlete slots must be 1 or 2", ErrInvalidTournamentInput)
+	}
+	if matchID == input.OtherMatchID && input.Slot == input.OtherSlot {
+		return nil, fmt.Errorf("%w: cannot swap an athlete slot with itself", ErrInvalidTournamentInput)
 	}
 	tournament, err := s.GetByID(ctx, tournamentID)
 	if err != nil {
@@ -682,29 +688,16 @@ func (s *tournamentService) SwapAthletes(
 	if err != nil {
 		return nil, err
 	}
-	secondIndex, err := lifecycleFindMatchIndex(tournament.Matches, otherMatchID)
+	secondIndex, err := lifecycleFindMatchIndex(tournament.Matches, input.OtherMatchID)
 	if err != nil {
 		return nil, err
 	}
 	first, second := &tournament.Matches[firstIndex], &tournament.Matches[secondIndex]
-	if first.WeightCategory != second.WeightCategory || first.Round != second.Round {
-		return nil, fmt.Errorf("%w: matches must share weight category and round", ErrInvalidTournamentInput)
-	}
-	for _, match := range []*Match{first, second} {
-		if err := schedulingValidateEditable(match); err != nil {
-			return nil, err
-		}
-		if match.Athlete1ID == nil || match.Athlete2ID == nil ||
-			*match.Athlete1ID == "" || *match.Athlete2ID == "" {
-			return nil, fmt.Errorf("%w: match %s needs both athletes", ErrInvalidTournamentInput, match.ID)
-		}
+	if first.WeightCategory != second.WeightCategory || first.Round != 1 || second.Round != 1 {
+		return nil, fmt.Errorf("%w: athlete swaps require first-round matches in the same weight category", ErrInvalidTournamentInput)
 	}
 	for i := range tournament.Matches {
 		match := &tournament.Matches[i]
-		if match.NextMatchID != nil &&
-			(*match.NextMatchID == matchID || *match.NextMatchID == otherMatchID) {
-			return nil, fmt.Errorf("%w: cannot swap participants supplied by previous matches", ErrMatchLocked)
-		}
 		if match.WeightCategory == first.WeightCategory && !lifecycleIsBye(match) &&
 			(lifecycleHasResult(match) || lifecycleMatchStatus(match) != MatchStatusPending) {
 			return nil, fmt.Errorf("%w: category has started or contains results", ErrMatchLocked)
@@ -712,11 +705,58 @@ func (s *tournamentService) SwapAthletes(
 	}
 	updated := schedulingCloneMatches(tournament)
 	a, b := &updated.Matches[firstIndex], &updated.Matches[secondIndex]
-	a.Athlete1ID, b.Athlete1ID = second.Athlete1ID, first.Athlete1ID
-	a.Athlete2ID, b.Athlete2ID = second.Athlete2ID, first.Athlete2ID
+	aSlot := athleteSwapSlot(a, input.Slot)
+	bSlot := athleteSwapSlot(b, input.OtherSlot)
+	if aSlot == nil || bSlot == nil || *aSlot == nil || *bSlot == nil ||
+		strings.TrimSpace(**aSlot) == "" || strings.TrimSpace(**bSlot) == "" {
+		return nil, fmt.Errorf("%w: both selected slots must contain an athlete", ErrInvalidTournamentInput)
+	}
+	*aSlot, *bSlot = *bSlot, *aSlot
+	refreshSwappedBye(updated, a)
+	if a.ID != b.ID {
+		refreshSwappedBye(updated, b)
+	}
 	updated.UpdatedAt = time.Now().UTC()
+	if err := lifecycleValidateBracket(updated); err != nil {
+		return nil, fmt.Errorf("validate bracket after athlete swap: %w", err)
+	}
 	if err := s.repository.Update(ctx, updated); err != nil {
-		return nil, fmt.Errorf("swap athletes between matches %s and %s: %w", matchID, otherMatchID, err)
+		return nil, fmt.Errorf("swap athletes between matches %s and %s: %w", matchID, input.OtherMatchID, err)
 	}
 	return updated, nil
+}
+
+func athleteSwapSlot(match *Match, slot int) **string {
+	if slot == 1 {
+		return &match.Athlete1ID
+	}
+	if slot == 2 {
+		return &match.Athlete2ID
+	}
+	return nil
+}
+
+func refreshSwappedBye(tournament *Tournament, match *Match) {
+	if !lifecycleIsBye(match) {
+		return
+	}
+	lone := match.Athlete1ID
+	if lone == nil {
+		lone = match.Athlete2ID
+	}
+	match.WinnerID = cloneStringPointer(lone)
+	lifecycleSetStatus(match, MatchStatusCompleted)
+	if match.NextMatchID == nil || lone == nil {
+		return
+	}
+	index, err := lifecycleFindMatchIndex(tournament.Matches, *match.NextMatchID)
+	if err != nil {
+		return
+	}
+	next := &tournament.Matches[index]
+	if match.NextSlot != nil && *match.NextSlot == NextSlotAthlete2 {
+		next.Athlete2ID = cloneStringPointer(lone)
+	} else {
+		next.Athlete1ID = cloneStringPointer(lone)
+	}
 }
