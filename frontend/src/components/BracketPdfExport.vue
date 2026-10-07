@@ -682,30 +682,6 @@ function isPowerOfTwo(value: number): boolean {
   return value >= 1 && (value & (value - 1)) === 0
 }
 
-/** سهم یک گروه از یک سمت براکت، محدود به دورهای ۱..maxRound */
-function sliceSide(
-    columns: BracketColumn[] | undefined,
-    part: number,
-    parts: number,
-    maxRound: number
-): BracketColumn[] {
-  return (columns ?? [])
-      .filter(c => c.round <= maxRound)
-      .map(c => {
-        const size = c.matches.length / parts
-        if (size < 1) return { round: c.round, matches: [] as MatchLike[] }
-
-        return {
-          round: c.round,
-          matches: c.matches.slice(
-              Math.round(part * size),
-              Math.round((part + 1) * size)
-          ),
-        }
-      })
-      .filter(c => c.matches.length > 0)
-}
-
 /** دورهای بعد از مرحله گروهی، شماره‌گذاری بازنویسی‌شده از ۱ */
 function finalStageColumns(
     columns: BracketColumn[] | undefined
@@ -715,30 +691,6 @@ function finalStageColumns(
       .map(c => ({ round: c.round - GROUP_ROUNDS, matches: c.matches }))
       .filter(c => c.matches.length > 0)
 }
-
-/** اسلات‌های ورودی صفحه نهایی: چپ بالا→پایین، سپس راست */
-function buildEntrySlots(
-    data: BracketData
-): Array<{ matchId: string; slot: 'athlete1' | 'athlete2' }> {
-  const columns = [...data.left, ...data.right]
-
-  const source = columns.length
-      ? (() => {
-        const entryRound = Math.min(...columns.map(c => c.round))
-
-        return [
-          ...data.left.filter(c => c.round === entryRound).flatMap(c => c.matches),
-          ...data.right.filter(c => c.round === entryRound).flatMap(c => c.matches),
-        ]
-      })()
-      : data.final ? [data.final] : []
-
-  return source.flatMap(m => [
-    { matchId: m.id, slot: 'athlete1' as const },
-    { matchId: m.id, slot: 'athlete2' as const },
-  ])
-}
-
 
 /** اندیس ساختاری براکت؛ order برای مسابقات دارای استراحت صفر است و قابل اتکا نیست */
 function bracketKey(match: MatchLike): number {
