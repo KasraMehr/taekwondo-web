@@ -305,6 +305,7 @@ func (a *API) Routes(router *gin.Engine) {
 	})
 	api.POST("/auth/login", a.route(false, false, a.login))
 	api.GET("/public/ovr", a.route(false, false, a.publicOVR))
+	api.GET("/public/weigh-in", a.route(false, false, a.publicWeighIn))
 	api.POST("/auth/logout", a.route(true, false, func(r *Request) (any, error) {
 		_, err := r.Tx.Exec(r.Context(), `DELETE FROM sessions WHERE token_hash=$1`, tokenHash(strings.TrimPrefix(r.C.GetHeader("Authorization"), "Bearer ")))
 		return nil, err
