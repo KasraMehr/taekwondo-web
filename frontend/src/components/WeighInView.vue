@@ -4,6 +4,7 @@
     <!-- نوار وضعیت کلی -->
     <div class="flex flex-wrap items-center gap-3">
       <h2 class="text-lg font-bold text-slate-800">⚖️ وزن‌کشی</h2>
+      <a :href="`/ovr/weigh-in?tournamentId=${tid}`" target="_blank" rel="noopener" class="rounded-lg bg-slate-900 px-4 py-2 text-sm font-bold text-white">نمایشگر OVR وزن‌کشی ↗</a>
       <div class="flex flex-wrap gap-2">
         <button v-for="c in statusChips" :key="c.key"
                 @click="filterStatus = filterStatus === c.key ? '' : c.key"
@@ -673,6 +674,7 @@ import { useTournamentStore } from '../stores/tournament'
 import { WEIGHT_CATEGORIES } from '../data/categories'
 import { parseCategory, checkWeight, MAX_ATTEMPTS, TOLERANCE_KG } from '../utils/weighIn'
 import WeighInPrintSheet from './WeighInPrintSheet.vue'
+import { weighInNumbers } from '../utils/weighInNumbers'
 import { webApi } from '../webApi'
 
 const store = useTournamentStore()
@@ -689,18 +691,8 @@ const searchInput = ref(null)
 const bulkApproving = ref(false)
 const printOpen = ref(false)
 const printMaxAttempts = ref(MAX_ATTEMPTS)
-const weighInNumbers = computed(() => {
-  const ordered = [...athletes.value].sort((a, b) => {
-    const weightA = weightIndex.value[String(a.weightCategory)] ?? 999
-    const weightB = weightIndex.value[String(b.weightCategory)] ?? 999
-    return weightA - weightB
-      || weightNum(a.weightCategory) - weightNum(b.weightCategory)
-      || (a.number ?? 0) - (b.number ?? 0)
-      || String(a.id).localeCompare(String(b.id))
-  })
-  return new Map(ordered.map((athlete, index) => [athlete.id, index + 1]))
-})
-function displayNumber(athlete) { return weighInNumbers.value.get(athlete.id) ?? 0 }
+const athleteNumbers = computed(() => weighInNumbers(athletes.value, weights.value))
+function displayNumber(athlete) { return athleteNumbers.value.get(athlete.id) ?? 0 }
 const printGroups = computed(() => weights.value.map(weight => ({
   weight,
   label: weightLabel(weight),

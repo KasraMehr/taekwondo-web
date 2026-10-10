@@ -13,6 +13,7 @@ import LeaguePage from './components/League/LeaguePage.vue'
 import TeamTournamentPage from './components/TeamTournoment/TeamTournamentPage.vue'
 import { loadWebLeagues, loadWebTournaments, loginWeb, savedSession, saveSession } from './webApi'
 import PublicOVR from './components/PublicOVR.vue'
+import WeighInOVR from './components/WeighInOVR.vue'
 
 const ui = useUiStore()
 const tournamentStore = useTournamentStore()
@@ -23,7 +24,8 @@ const session = ref(savedSession())
 const loading = ref(false)
 const error = ref('')
 const form = reactive({ email: '', password: '' })
-const isPublicOVR = location.pathname.toLowerCase() === '/ovr'
+const isPublicOVR = /^\/ovr(?:\/[1-9]\d*)?\/?$/i.test(location.pathname)
+const isWeighInOVR = /^\/ovr\/weigh-in(?:\/[1-9]\d*)?\/?$/i.test(location.pathname)
 function applyUrl(){
   const parts=location.pathname.split('/').filter(Boolean)
   if(parts[0]==='poomsae') { ui.homeSection='poomsae'; if(parts[1]) { ui.poomsaeEventId=parts[1]; ui.poomsaeDivisionId=new URLSearchParams(location.search).get('division')||''; ui.poomsaeTab=(['athletes','draw','scores','standings','print','settings'].includes(parts[2])?parts[2]:'athletes') as PoomsaeTab; ui.page='poomsae' } else ui.goHome(); return }
@@ -46,7 +48,7 @@ async function hydrate(){
 }
 async function submitLogin(){loading.value=true;error.value='';try{session.value=await loginWeb(form.email,form.password);await hydrate()}catch(e:any){error.value=e?.message||'ورود ناموفق بود'}finally{loading.value=false}}
 function logout(){if(poomsaeStore.dirtyCount&&!confirm('نمرهٔ ذخیره‌نشده دارید. بدون ذخیره خارج می‌شوید؟'))return;poomsaeStore.reset();saveSession(null);session.value=null;error.value='';ui.goHome()}
-onMounted(()=>{if(session.value)hydrate()})
+onMounted(()=>{if(session.value && !isPublicOVR && !isWeighInOVR)hydrate()})
 onMounted(()=>window.addEventListener('popstate',applyUrl))
 function beforeLeave(e:BeforeUnloadEvent){if(poomsaeStore.dirtyCount){e.preventDefault();e.returnValue=''}}
 onMounted(()=>window.addEventListener('beforeunload',beforeLeave))
@@ -55,7 +57,8 @@ watch([()=>ui.page,()=>ui.tab,()=>ui.leagueTab,()=>ui.homeSection,()=>ui.poomsae
 </script>
 
 <template>
-  <PublicOVR v-if="isPublicOVR" />
+  <WeighInOVR v-if="isWeighInOVR" />
+  <PublicOVR v-else-if="isPublicOVR" />
   <div v-else-if="!session" class="flex min-h-screen items-center justify-center bg-slate-100 px-4 text-slate-800">
     <form class="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-7 shadow-xl" @submit.prevent="submitLogin">
       <div class="mb-6 text-center"><div class="text-5xl">🥋</div><h1 class="mt-3 text-xl font-bold">قرعه‌کشی مسابقات تکواندو</h1><p class="mt-2 text-sm text-slate-500">ورود به پنل هیئت برگزاری</p></div>
