@@ -4,6 +4,7 @@
       type="button"
       class="no-print fixed bottom-6 left-6 z-50 rounded-xl bg-slate-900 px-5 py-3 text-sm font-bold text-white shadow-xl transition hover:-translate-y-0.5 hover:bg-slate-800"
       @click="print"
+      :disabled="!pages.length"
   >
     🖨️
     {{
@@ -18,6 +19,11 @@
       class="min-h-screen bg-slate-100 p-4 font-sans"
       dir="rtl"
   >
+    <div class="no-print print-intro">
+      <div><h2>جدول مسابقات برای چاپ و نصب</h2><p>A4 افقی · جدول ۳۲ نفره · نام بازیکن و باشگاه</p></div>
+      <span>{{ toFaNumber(pages.length) }} صفحه آماده چاپ</span>
+      <p class="print-intro-note">شناسهٔ هر بازی از حرف زمین و شمارهٔ بازی تشکیل شده است؛ مثلاً A20. جایگاه‌های مراحل بعد برای ثبت صعود بازیکنان خالی می‌مانند.</p>
+    </div>
     <!-- فیلتر وزن؛ در چاپ نمایش داده نمی‌شود -->
     <div
         class="no-print sticky top-0 z-40 mb-4 flex flex-wrap items-center gap-2 rounded-2xl border border-slate-200 bg-white/95 px-3 py-2.5 shadow-sm backdrop-blur"
@@ -76,7 +82,7 @@
 
     <!-- یک صفحه برای هر بخش یا وزن -->
     <section
-        v-for="page in pages"
+        v-for="(page, pageIndex) in pages"
         :key="page.key"
         class="category-page mb-8 rounded-2xl border border-slate-200 bg-white shadow-md"
     >
@@ -102,7 +108,7 @@
       </span>
           </div>
           <div class="header-org">
-            فدراسیون تکواندو جمهوری اسلامی ایران
+            جدول مسابقات تکواندو
           </div>
         </div>
 
@@ -144,9 +150,7 @@
                   {{ roundLabel(col.round + page.roundOffset, page.totalRounds) }}
                 </span>
 
-                <small>
-                  {{ toFaNumber(col.matches.length) }} بازی
-                </small>
+
               </div>
 
               <div class="round-grid">
@@ -196,7 +200,7 @@
 
                     <div>
                       <strong>{{ page.finalLabel }}</strong>
-                      <small>مسابقه قهرمانی</small>
+                      <small>{{ page.groupIndex ? 'تعیین صعودکننده این بخش' : 'مسابقه قهرمانی' }}</small>
                     </div>
                   </div>
 
@@ -231,7 +235,7 @@
 
                     <div class="champion-content">
                       <span class="champion-label">
-                        قهرمان {{ getWeightLabel(page.cat) }}
+                        {{ page.groupIndex ? `برنده گروه ${toFaNumber(page.groupIndex)}` : `قهرمان ${getWeightLabel(page.cat)}` }}
                       </span>
 
                       <strong>
@@ -278,7 +282,7 @@
                 <template v-else>
                   <div class="empty-final-card" dir="rtl">
                     <span>➡️</span>
-                    <strong>ادامه براکت در صفحه بعد</strong>
+                    <strong>ادامه هر نیمه در برگه نهایی این وزن</strong>
                   </div>
                 </template>
               </div>
@@ -297,9 +301,7 @@
                   {{ roundLabel(col.round + page.roundOffset, page.totalRounds) }}
                 </span>
 
-                <small>
-                  {{ toFaNumber(col.matches.length) }} بازی
-                </small>
+
               </div>
 
               <div class="round-grid">
@@ -329,6 +331,10 @@
           </div>
         </div>
       </div>
+      <footer class="bracket-page-footer">
+        <span>{{ page.advanceHint || 'شناسه بازی: حرف زمین + شماره بازی  |  A20 = زمین A، بازی 20' }}</span>
+        <strong>صفحه {{ toFaNumber(pageIndex + 1) }} از {{ toFaNumber(pages.length) }}</strong>
+      </footer>
     </section>
   </div>
 </template>
@@ -341,7 +347,7 @@ import {
   nextTick,
   ref,
   type CSSProperties,
-  type PropType, onUnmounted, onMounted,
+  type PropType,
 } from 'vue'
 
 import { useTournamentStore } from '../stores/tournament'
@@ -363,10 +369,11 @@ type MatchLike = {
   winnerId?: string | null
   court: number
   order: number
+  matchNumber?: number
   bracketIndex?: number
   weightCategory: string
   round: number
-  side: 'left' | 'right' | 'final'
+  side: 'left' | 'right' | 'final' | 'semifinal'
   nextMatchId?: string
   isBye?: boolean
   nextSlot?: 'athlete1' | 'athlete2'
@@ -532,13 +539,12 @@ function courtToken(court: number): string {
   )
 }
 
-/** برچسب ترکیبی زمین و شماره بازی؛ مثل C۲۶ */
+/** Compact court and match identifier, kept left-to-right in print. */
 function matchTag(match: MatchLike): string {
-  if (isTrueBye(match)) {
-    return courtToken(match.court)
-  }
-
-  return `${courtToken(match.court)}${toFaNumber(match.order ?? 0)}`
+  if (isTrueBye(match)) return ''
+  const number = match.matchNumber && match.matchNumber > 0 ? match.matchNumber : match.order
+  if (!number || number < 1 || match.court < 1) return 'شماره‌گذاری نشده'
+  return `${courtToken(match.court)}${number}`
 }
 
 function weightSortValue(category: string): number {
@@ -636,17 +642,11 @@ function getSideMatchCount(data: BracketData): number {
   )
 }
 
-const GROUP_SIZE = 32
-
-/** ۳۲→۱۶→۸→۴→۲→۱ یعنی پنج دور داخل هر گروه */
-const GROUP_ROUNDS = 5
-
-function isPowerOfTwo(value: number): boolean {
-  return value >= 1 && (value & (value - 1)) === 0
-}
-
-/** سهم یک گروه از یک سمت براکت، محدود به دورهای ۱..maxRound */
-function sliceSide(
+/** برش افقی (سطری) هر سمت براکت.
+ *  برش روی «ترتیب نمایش» انجام میشود (همان ترتیبی که روی صفحه رسم میشود)
+ *  تا سطرهای هر برگه دقیقاً همان سطرهای براکت اصلی باشد و کسی جابهجا نشود.
+ */
+function sliceSideRows(
     columns: BracketColumn[] | undefined,
     part: number,
     parts: number,
@@ -655,47 +655,31 @@ function sliceSide(
   return (columns ?? [])
       .filter(c => c.round <= maxRound)
       .map(c => {
-        const size = c.matches.length / parts
-        if (size < 1) return { round: c.round, matches: [] as MatchLike[] }
+        const length = c.matches.length
+
+        if (length < parts) {
+          return { round: c.round, matches: [] as MatchLike[] }
+        }
+
+        // بازه سطری این دور در این برگه: تقسیم دقیق، بدون گپ یا همپوشانی
+        const from = Math.floor((part * length) / parts)
+        const to = Math.floor(((part + 1) * length) / parts)
 
         return {
           round: c.round,
-          matches: c.matches.slice(
-              Math.round(part * size),
-              Math.round((part + 1) * size)
-          ),
+          matches: c.matches.slice(from, to),
         }
       })
       .filter(c => c.matches.length > 0)
 }
 
-/** زیرجدول ۳۲ نفره → چیدمان روبه‌رو: نیمه بالا چپ، نیمه پایین راست، تک‌بازی آخر مرکز */
-function toFacingBracket(columns: BracketColumn[]): BracketData {
-  if (!columns.length) return { left: [], right: [], final: null }
+const GROUP_SIZE = 32
 
-  const maxRound = Math.max(...columns.map(c => c.round))
-  const lastColumn = columns.find(c => c.round === maxRound)
-  const hasDecider = lastColumn?.matches.length === 1
+/** پنج دور در هر صفحه ۳۲ نفره */
+const GROUP_ROUNDS = 4
 
-  const left: BracketColumn[] = []
-  const right: BracketColumn[] = []
-
-  for (const c of columns) {
-    if (hasDecider && c.round === maxRound) continue
-
-    const half = Math.ceil(c.matches.length / 2)
-    const top = c.matches.slice(0, half)
-    const bottom = c.matches.slice(half)
-
-    if (top.length) left.push({ round: c.round, matches: top })
-    if (bottom.length) right.push({ round: c.round, matches: bottom })
-  }
-
-  return {
-    left,
-    right,
-    final: hasDecider ? lastColumn!.matches[0] : null,
-  }
+function isPowerOfTwo(value: number): boolean {
+  return value >= 1 && (value & (value - 1)) === 0
 }
 
 /** دورهای بعد از مرحله گروهی، شماره‌گذاری بازنویسی‌شده از ۱ */
@@ -707,30 +691,6 @@ function finalStageColumns(
       .map(c => ({ round: c.round - GROUP_ROUNDS, matches: c.matches }))
       .filter(c => c.matches.length > 0)
 }
-
-/** اسلات‌های ورودی صفحه نهایی: چپ بالا→پایین، سپس راست */
-function buildEntrySlots(
-    data: BracketData
-): Array<{ matchId: string; slot: 'athlete1' | 'athlete2' }> {
-  const columns = [...data.left, ...data.right]
-
-  const source = columns.length
-      ? (() => {
-        const entryRound = Math.min(...columns.map(c => c.round))
-
-        return [
-          ...data.left.filter(c => c.round === entryRound).flatMap(c => c.matches),
-          ...data.right.filter(c => c.round === entryRound).flatMap(c => c.matches),
-        ]
-      })()
-      : data.final ? [data.final] : []
-
-  return source.flatMap(m => [
-    { matchId: m.id, slot: 'athlete1' as const },
-    { matchId: m.id, slot: 'athlete2' as const },
-  ])
-}
-
 
 /** اندیس ساختاری براکت؛ order برای مسابقات دارای استراحت صفر است و قابل اتکا نیست */
 function bracketKey(match: MatchLike): number {
@@ -864,14 +824,17 @@ const pages = computed<BracketPage[]>(() => {
       return bracketKey(a) - bracketKey(b)
     })
 
-    const fullData = normalizeColumns(
-        buildBracketColumns(
-            sortedMatches.map(m => ({
-              ...m,
-              winnerId: m.winnerId ?? undefined,
-            }))
-        ) as BracketData
-    )
+    // داده خام: دقیقاً با ترتیب نمایش روی صفحه (بدون مرتبسازی مجدد سطرها)
+    const sourceData = buildBracketColumns(
+        sortedMatches.map(m => ({
+          ...m,
+          winnerId: m.winnerId ?? undefined,
+        }))
+    ) as BracketData
+
+    // فقط برای برگههای یکصفحهای از نسخه مرتبشده استفاده میشود
+    const fullData = normalizeColumns(sourceData)
+
 
     const totalRounds = Math.max(...sortedMatches.map(m => m.round), 1)
     const firstRoundCount = sortedMatches.filter(m => m.round === 1).length
@@ -891,7 +854,7 @@ const pages = computed<BracketPage[]>(() => {
     const podium = buildPodium(sortedMatches, totalRounds)
     const weightIndex = index + 1
 
-    // تفکیک ۳ صفحه‌ای صرفاً برای جداول بزرگ‌تر از ۳۲ نفر
+    // تقسیم جدول به بخش‌های خوانا و مرحله نهایی
     const basePage = {
       cat: category,
       courts,
@@ -924,87 +887,74 @@ const pages = computed<BracketPage[]>(() => {
       return
     }
 
+    // مرحله نهایی هم از ترتیب نمایش ساخته میشود تا جای ورزشکارها عوض نشود
     const finalStageData: BracketData = {
-      left: finalStageColumns(fullData.left),
-      right: finalStageColumns(fullData.right),
-      final: fullData.final,
+      left: finalStageColumns(sourceData.left),
+      right: finalStageColumns(sourceData.right),
+      final: sourceData.final,
     }
 
-    // گروه‌ها: اول سمت چپ از بالا به پایین، سپس سمت راست
-    const partsPerSide = groupCount / 2
-    const groups: BracketData[] = []
+    const pageCount = groupCount
+    const pageBands: BracketData[] = []
 
-    for (const side of ['left', 'right'] as const) {
-      for (let part = 0; part < partsPerSide; part++) {
-        groups.push(
-            toFacingBracket(
-                sliceSide(
-                    side === 'left' ? fullData.left : fullData.right,
-                    part,
-                    partsPerSide,
-                    GROUP_ROUNDS
-                )
-            )
-        )
-      }
+    // هر برگه = یک نوار افقی از کل براکت (هر دو سمت، با ارتفاع یکسان)
+    for (let part = 0; part < pageCount; part++) {
+      pageBands.push({
+        left: sliceSideRows(sourceData.left, part, pageCount, GROUP_ROUNDS),
+        right: sliceSideRows(sourceData.right, part, pageCount, GROUP_ROUNDS),
+        final: null,
+      })
     }
 
-    // نقشه «برنده گروه n» برای اسلات‌های خالی صفحه نهایی
-    const entrySlots = buildEntrySlots(finalStageData)
-    const entryRoundLabel = roundLabel(GROUP_ROUNDS + 1, totalRounds)
+    // Label each 16-person branch by its original side and vertical band.
     const slotLabels: SlotLabelMap = {}
+    const branchLabel = (part: number, side: 'left' | 'right') =>
+        `برنده بخش ${toFaNumber(part + 1)} ${side === 'left' ? 'چپ' : 'راست'}`
 
-    groups.forEach((group, i) => {
-      const decider = group.final
-
-      const target =
-          decider?.nextMatchId && decider.nextSlot
-              ? { matchId: decider.nextMatchId, slot: decider.nextSlot }
-              : entrySlots[i]
-
-      if (!target) return
-
-      const bucket = slotLabels[target.matchId] ?? {}
-      bucket[target.slot] = `برنده گروه ${toFaNumber(i + 1)}`
-      slotLabels[target.matchId] = bucket
+    pageBands.forEach((band, part) => {
+      for (const side of ['left', 'right'] as const) {
+        const columns = band[side]
+        const decider = columns.find(c => c.round === GROUP_ROUNDS)?.matches[0]
+        if (!decider?.nextMatchId || !decider.nextSlot) continue
+        const bucket = slotLabels[decider.nextMatchId] ?? {}
+        bucket[decider.nextSlot] = branchLabel(part, side)
+        slotLabels[decider.nextMatchId] = bucket
+      }
     })
 
-    // صفحات ۳۲ نفره
-    groups.forEach((group, i) => {
+    // Two 16-person branches from the same vertical band share one A4 sheet.
+    pageBands.forEach((band, i) => {
       allPages.push({
         ...basePage,
-        key: `${category}-g${i + 1}`,
+        key: `${category}-band${i + 1}`,
         displaySize: GROUP_SIZE,
-        sideMatchCount: getSideMatchCount(group),
+        sideMatchCount: getSideMatchCount(band),
         isSplitted: true,
-        partTitle:
-            `گروه ${toFaNumber(i + 1)} از ${toFaNumber(groupCount)}` +
-            ` — جدول ${toFaNumber(GROUP_SIZE)} نفره`,
-        advanceHint:
-            `برنده گروه ${toFaNumber(i + 1)} → جایگاه ${toFaNumber(i + 1)}` +
-            ` در ${entryRoundLabel}`,
-        showFinal: Boolean(group.final),
-        data: group,
+        partTitle: `بخش ${toFaNumber(i + 1)} از ${toFaNumber(pageCount)} — دو نیمهٔ ۱۶ نفره`,
+        advanceHint: `ادامهٔ دو سمت این بخش در برگهٔ نهایی ${getWeightLabel(category)}`,
+        showFinal: false,
+        data: band,
         podium: [],
         roundOffset: 0,
-        finalLabel: roundLabel(group.final?.round ?? GROUP_ROUNDS, totalRounds),
+        finalLabel: '',
         slotLabels: {},
         groupIndex: i + 1,
-        groupTotal: groupCount,
+        groupTotal: pageCount,
       })
     })
 
+    const entryRoundLabel = roundLabel(GROUP_ROUNDS + 1, totalRounds)
     // صفحه مرحله نهایی: از دور بعد از گروه‌ها تا فینال
     allPages.push({
       ...basePage,
       key: `${category}-final`,
-      displaySize: groupCount,
+      displaySize: groupCount * 2,
       sideMatchCount: getSideMatchCount(finalStageData),
       isSplitted: true,
       partTitle:
           groupCount === 2
-              ? 'مسابقه فینال و قهرمانی'
-              : `مرحله نهایی — ${toFaNumber(groupCount)} نفر آخر` +
+              ? 'نیمه‌نهایی و فینال'
+              : `مرحله نهایی — ${toFaNumber(groupCount * 2)} نفر آخر` +
               ` (${entryRoundLabel} تا فینال)`,
       showFinal: true,
       data: finalStageData,
@@ -1226,8 +1176,8 @@ const MatchBox = defineComponent({
                     'div',
                     {
                       class: isEmpty
-                          ? 'truncate text-[10px] font-bold opacity-60'
-                          : 'athlete-name truncate font-bold',
+                          ? 'athlete-placeholder font-medium'
+                          : 'athlete-name font-bold',
                     },
                     slotText(id, placeholder)
                 ),
@@ -1235,7 +1185,7 @@ const MatchBox = defineComponent({
                 !isEmpty && affiliation
                     ? h(
                         'div',
-                        { class: 'athlete-affiliation truncate', title: affiliation },
+                        { class: 'athlete-affiliation', title: affiliation },
                         affiliation
                     )
                     : null,
@@ -1277,19 +1227,20 @@ const MatchBox = defineComponent({
                 'div',
                 { class: 'match-meta' },
                 [
-                  props.showMeta
+                  props.showMeta && !byeMatch
                       ? h('div', { class: byeMatch ? 'match-tag is-bye-tag' : 'match-tag' }, matchTag(match))
                       : null
                 ]
             ),
 
-            renderSlot(athlete1, match.athlete1Id, athlete1IsWinner, 'blue', props.placeholder1),
+            renderSlot(athlete1, match.athlete1Id, athlete1IsWinner, 'blue'),
 
 
-            h('div', { class: 'my-0.5 border-t border-slate-100' }),
+            h('div', { class: 'match-join', 'aria-hidden': 'true' }),
 
 
-            renderSlot(athlete2, match.athlete2Id, athlete2IsWinner, 'red', props.placeholder2),
+            renderSlot(athlete2, match.athlete2Id, athlete2IsWinner, 'red'),
+
 
           ]
       )
@@ -1322,6 +1273,7 @@ function getWeightLabel(category: string): string {
 
 
 async function print(): Promise<void> {
+  await document.fonts.ready
   await nextTick()
 
   requestAnimationFrame(() => {
@@ -1337,6 +1289,7 @@ async function printCategory(
   const previousCategory = selectedCategory.value
 
   selectedCategory.value = category
+  await document.fonts.ready
   await nextTick()
 
   requestAnimationFrame(() => {
@@ -1359,36 +1312,6 @@ async function printCategory(
       restoreCategory
   )
 }
-
-// A4 landscape با حاشیه 4mm => ‌فضای قابل چاپ ≈ 289mm × 202mm
-const PAGE_W = (289 / 25.4) * 94;
-const PAGE_H = (202 / 25.4) * 94;
-
-// ضریب اطمینان: جلوی سرریز ناشی از گرد شدن zoom در رندر چاپ را می‌گیرد
-const SAFETY = 0.95;
-
-function fitBracketsToPage() {
-  document.querySelectorAll<HTMLElement>('.category-page').forEach((page) => {
-    const stage = page.querySelector<HTMLElement>('.bracket-stage');
-    if (!stage) return;
-
-    stage.style.removeProperty('--print-scale');
-
-    const header = page.querySelector<HTMLElement>('.pdf-header');
-    const headerH = header ? header.offsetHeight : 0;
-
-    const scale = Math.min(
-        (PAGE_W / stage.scrollWidth) * SAFETY,
-        ((PAGE_H - headerH) / stage.scrollHeight) * SAFETY,
-        1.6,
-    );
-
-    stage.style.setProperty('--print-scale', String(scale));
-  });
-}
-
-onMounted(() => window.addEventListener('beforeprint', fitBracketsToPage));
-onUnmounted(() => window.removeEventListener('beforeprint', fitBracketsToPage));
 
 </script>
 
@@ -2274,19 +2197,6 @@ onUnmounted(() => window.removeEventListener('beforeprint', fitBracketsToPage));
   --print-scale: 0.62;
 }
 
-.bracket-stage.size-32 .match-card {
-  height: var(--card-height) !important;
-  max-height: var(--card-height) !important;
-  overflow: hidden !important;
-}
-
-.bracket-stage.size-32 .athlete-slot,
-.bracket-stage.size-32 .athlete-slot * {
-  white-space: nowrap !important;
-  overflow: hidden !important;
-  text-overflow: ellipsis !important;
-}
-
 .bracket-stage.size-32 .round-heading {
   height: 38px;
   min-height: 38px;
@@ -2365,445 +2275,150 @@ onUnmounted(() => window.removeEventListener('beforeprint', fitBracketsToPage));
   }
 }
 /* =========================================================
-   Print — سبک خطی (بدون کادر)
+   A4 preview and print layout
    ========================================================= */
 
+
+/* Readable names, club affiliations and progression labels. */
+#bracket-print-root .print-intro { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:12px; padding:20px; margin-bottom:16px; background:#0f172a; color:white; border-radius:16px; }
+.print-intro h2 { font-size:20px; font-weight:900; }
+.print-intro p { font-size:13px; line-height:1.8; color:#cbd5e1; }
+.print-intro-note { width:100%; }
+#bracket-print-root .athlete-name, #bracket-print-root .athlete-affiliation, #bracket-print-root .athlete-placeholder { white-space:normal; overflow:visible; text-overflow:clip; overflow-wrap:anywhere; }
+#bracket-print-root .athlete-name { font-size:14px; line-height:1.4; font-weight:800; }
+#bracket-print-root .athlete-affiliation { font-size:12px; line-height:1.4; color:#334155; }
+#bracket-print-root .athlete-placeholder { font-size:11px; line-height:1.5; color:#475569; }
+#bracket-print-root .match-tag { font-size:11px; line-height:1.5; letter-spacing:0; }
+#bracket-print-root .next-match-label { flex:0 0 auto; font-size:10px; line-height:1.5; padding-top:3px; border-top:1px solid #cbd5e1; color:#334155; text-align:center; }
+.bracket-page-footer { display:flex; justify-content:space-between; gap:16px; border-top:1px solid #94a3b8; padding:10px 16px; font-size:12px; color:#334155; }
+.bracket-page-footer strong { white-space:nowrap; }
+
 @media print {
-  .no-print {
-    display: none !important;
-  }
-
-  html,
-  body {
-    width: 100% !important;
-    margin: 0 !important;
-    padding: 0 !important;
-    background: #ffffff !important;
-  }
-
-  body * {
-    visibility: hidden;
-  }
-
-  #bracket-print-root,
-  #bracket-print-root * {
-    visibility: visible;
-  }
-
-  #bracket-print-root {
-    position: absolute;
-    top: 0;
-    left: 0;
-    width: 100%;
-    min-height: 0;
-    padding: 0 !important;
-    background: #ffffff !important;
-  }
-
-  /* ---------- هدر ---------- */
-  .pdf-header {
-    background: #ffffff !important;
-    border: 0 !important;
-    border-bottom: 1.5px solid #000 !important;
-    padding: 6px 8px !important;
-  }
-
-  .header-title,
-  .header-org,
-  .header-part {
-    color: #000 !important;
-  }
-
-  .header-title { font-size: 14pt !important; }
-  .header-org { font-size: 9pt !important; }
-
-  .header-pill {
-    background: #fff !important;
-    color: #000 !important;
-    border: 1px solid #000 !important;
-    border-radius: 4px !important;
-    font-size: 9pt !important;
-    padding: 3px 8px !important;
-  }
-
-  .header-court {
-    background: #fff !important;
-    border: 1.5px solid #000 !important;
-  }
-
-  /* ---------- صفحه‌بندی ---------- */
-  .category-page {
-    overflow: visible !important;
-    margin: 0 !important;
-    border: 0 !important;
-    border-radius: 0 !important;
-    box-shadow: none !important;
-    break-after: page;
-    break-inside: avoid !important;
-    page-break-after: always;
-    page-break-inside: avoid !important;
-  }
-
-  .category-page:last-child {
-    break-after: auto;
-    page-break-after: auto;
-  }
-
-  .bracket-scroll-container {
-    overflow: visible !important;
-    padding: 0 !important;
-    background: #ffffff !important;
-  }
-
-  /* ---------- استیج ----------
-     ارتفاع کارت از روی اسلات‌ها حساب می‌شود:
-     ۲ اسلات + ۲۲px فضای شماره مسابقه.
-     پس اسلات دوم دیگر هیچ‌وقت بیرون کارت نمی‌افتد. */
-  .bracket-stage {
-    overflow: visible !important;
-    width: max-content !important;
-    min-width: 0 !important;
-    margin: 0 auto !important;
-    padding: 6px 4px 40px !important;
-    background: #ffffff !important;
-    --slot-height: 56px !important;
-    --card-height: calc(var(--slot-height) * 2 + 22px) !important;
-    --row-height: calc(var(--card-height) + 12px) !important;
-    --row-gap: 12px !important;
-    /* ضریب اطمینان روی مقیاسِ JS تا گِرد شدن zoom باعث پرش به صفحه بعد نشود */
-    zoom: calc(var(--print-scale, var(--print-scale-fallback, 1)) * var(--print-safety, 1));
-  }
-
-  .bracket-stage.size-32 {
-    --slot-height: 50px !important;
-    --row-gap: 8px !important;
-    --print-safety: 0.96;
-    --print-scale-fallback: 0.34;
-  }
-
-  .bracket-stage.size-64 {
-    --slot-height: 50px !important;
-    --row-gap: 6px !important;
-    --print-safety: 0.96;
-    --print-scale-fallback: 0.30;
-  }
-
-  /* همین هندسه هنگام اندازه‌گیری JS هم فعال باشد */
-  body.printing .bracket-stage {
-    --slot-height: 54px !important;
-    --card-height: calc(var(--slot-height) * 2 + 22px) !important;
-    --row-height: calc(var(--card-height) + 12px) !important;
-    --row-gap: 12px !important;
-    padding: 6px 4px 40px !important;
-  }
-  body.printing .bracket-stage.size-32 {
-    --slot-height: 60px !important;
-    --row-gap: 8px !important;
-  }
-  body.printing .bracket-stage.size-64 {
-    --slot-height: 60px !important;
-    --row-gap: 6px !important;
-  }
-
-  /* ---------- کارت مسابقه: بدون کادر، فقط فضا ---------- */
-  .bracket-stage .bracket-match-card {
-    width: 400px !important;
-  }
-
-  .bracket-stage .match-card,
-  .bracket-stage .final-match-card {
-    height: var(--card-height) !important;
-    min-height: 0 !important;
-    max-height: none !important;
-    overflow: visible !important;
-    display: flex !important;
-    flex-direction: column !important;
-    justify-content: flex-end !important;
-    border: 0 !important;
-    border-radius: 0 !important;
-    background: transparent !important;
-    box-shadow: none !important;
-    padding: 0 4px !important;
-  }
-
-  /* ---------- اسلات بازیکن: اسم روی خط ---------- */
-  .bracket-stage .athlete-slot {
-    height: var(--slot-height) !important;
-    min-height: 0 !important;
-    max-height: var(--slot-height) !important;
-    display: flex !important;
-    flex-direction: column !important;
-    justify-content: flex-end !important;
-    font-size: 12pt !important;
-    line-height: 1.15 !important;
-    color: #000 !important;
-    border-bottom: 1px solid #000 !important;
-    padding: 0 4px 2px !important;
-    overflow: visible !important;  /* برش عمودی نده */
-    text-align: center !important;
-  }
-
-  .bracket-stage.size-32 .athlete-slot { font-size: 11.5pt !important; }
-  .bracket-stage.size-64 .athlete-slot { font-size: 10.5pt !important; }
-
-  /* nowrap/ellipsis فقط روی متنِ داخل اسلات، نه خود اسلات —
-     تا فقط از پهنا کوتاه شود، نه از ارتفاع */
-  .bracket-stage .athlete-slot > * {
-    white-space: nowrap !important;
-    overflow: hidden !important;
-    text-overflow: ellipsis !important;
-    max-width: 100% !important;
-  }
-
-  .bracket-stage .athlete-details {
-    flex: 0 0 auto !important;
-    width: 100% !important;
-    min-width: 0 !important;
-  }
-
-  .bracket-stage .athlete-name {
-    line-height: 1.3 !important;
-  }
-
-  .bracket-stage .athlete-affiliation {
-    margin-top: 2px !important;
-    display: block !important;
-    font-size: 10pt !important;
-    font-weight: 600 !important;
-    line-height: 1.3 !important;
-    color: #222 !important;
-    opacity: 1 !important;
-    text-align: center !important;
-    width: 100% !important;
-  }
-
-  .bracket-stage .athlete-slot:last-child {
-    border-bottom: 1.5px solid #000 !important;
-  }
-
-  .bracket-stage .empty-slot {
-    height: var(--slot-height) !important;
-    min-height: 0 !important;
-    border-bottom: 1.5px solid #000 !important;
-  }
-
-  /* ---------- برنده: فقط بولد + خط ضخیم‌تر ---------- */
-  .bracket-stage .winner-slot {
-    box-shadow: none !important;
-    background: transparent !important;
-    font-weight: 900 !important;
-    border-bottom-width: 2.5px !important;
-  }
-
-  .bracket-stage .bye-win-slot {
-    box-shadow: none !important;
-    background: transparent !important;
-    border-bottom-color: #999 !important;
-  }
-
-  .bracket-stage .winner-star { color: #000 !important; }
-
-  .bracket-stage .athlete-color-marker {
-    border: 1px solid #000 !important;
-  }
-
-  /* ---------- شماره مسابقه: عدد ساده کنار خط ---------- */
-  .bracket-stage .match-tag {
-    background: transparent !important;
-    color: #000 !important;
-    border: 0 !important;
-    border-radius: 0 !important;
-    font-size: 16pt !important;
-    font-weight: 900 !important;
-    line-height: 1 !important;
-    padding: 0 4px !important;
-    letter-spacing: 0 !important;
-  }
-
-  .bracket-stage .match-tag.is-bye-tag {
-    color: #888 !important;
-  }
-
-  .bracket-stage .match-card.is-finished,
-  .bracket-stage .match-card.is-bye-win {
-    background: transparent !important;
-    box-shadow: none !important;
-    border: 0 !important;
-  }
-
-  /* ---------- خطوط اتصال ---------- */
-  .bracket-stage .match-node::before,
-  .bracket-stage .match-node::after,
-  .bracket-stage .bracket-match-card::before,
-  .bracket-stage .bracket-match-card::after,
-  .bracket-stage .final-match-anchor::before,
-  .bracket-stage .final-match-anchor::after {
-    background: #000 !important;
-  }
-
-  /* ---------- سرستون دورها ---------- */
-  .round-heading {
-    background: transparent !important;
-    border: 0 !important;
-    box-shadow: none !important;
-    color: #000 !important;
-  }
-
-  /* ---------- فینال ---------- */
-  .bracket-stage .final-badge {
-    background: #fff !important;
-    border: 0 !important;
-    border-bottom: 1.5px solid #000 !important;
-    border-radius: 0 !important;
-    box-shadow: none !important;
-    min-height: 0 !important;
-    color: #000 !important;
-    padding-bottom: 3px !important;
-  }
-
-  .bracket-stage .final-badge-icon { display: none !important; }
-
-  .bracket-stage .final-badge strong {
-    font-size: 11pt !important;
-    color: #000 !important;
-  }
-
-  .bracket-stage .final-badge small {
-    font-size: 8pt !important;
-    color: #333 !important;
-  }
-
-  .bracket-stage .final-match-card {
-    border: 0 !important;
-    background: transparent !important;
-    box-shadow: none !important;
-  }
-
-  .bracket-stage .final-match-card .athlete-slot {
-    border-bottom-width: 2px !important;
-    font-size: 12pt !important;
-  }
-
-  .bracket-stage .empty-final-card {
-    border: 0 !important;
-    border-bottom: 1.5px dashed #000 !important;
-    border-radius: 0 !important;
-    background: transparent !important;
-    color: #000 !important;
-    box-shadow: none !important;
-  }
-
-  .bracket-stage .empty-final-card span { display: none !important; }
-  .bracket-stage .empty-final-card strong { font-size: 10.5pt !important; }
-
-  /* ---------- قهرمان ---------- */
-  .bracket-stage .champion-card {
-    background: transparent !important;
-    border: 0 !important;
-    border-top: 1.5px solid #000 !important;
-    border-radius: 0 !important;
-    box-shadow: none !important;
-    padding: 6px 2px !important;
-  }
-
-  .bracket-stage .champion-crown {
-    background: #fff !important;
-    border: 1.5px solid #000 !important;
-    color: #000 !important;
-    box-shadow: none !important;
-  }
-
-  .bracket-stage .champion-label { color: #000 !important; font-size: 8pt !important; }
-  .bracket-stage .champion-content strong { color: #000 !important; font-size: 12pt !important; }
-  .bracket-stage .champion-content small { color: #333 !important; font-size: 8pt !important; }
-
-  /* ---------- رده‌بندی نهایی ---------- */
-  .bracket-stage .podium-card {
-    background: transparent !important;
-    border: 0 !important;
-    border-top: 1px solid #000 !important;
-    border-radius: 0 !important;
-    box-shadow: none !important;
-    padding: 6px 0 0 !important;
-    gap: 0 !important;
-  }
-
-  .bracket-stage .podium-title {
-    color: #000 !important;
-    font-size: 8.5pt !important;
-    margin-bottom: 4px !important;
-  }
-
-  .bracket-stage .podium-row {
-    background: transparent !important;
-    border-radius: 0 !important;
-    border-bottom: 1px solid #ccc !important;
-    padding: 4px 2px !important;
-    gap: 8px !important;
-  }
-
-  .bracket-stage .podium-rank {
-    background: #fff !important;
-    border: 1.5px solid #000 !important;
-    color: #000 !important;
-    font-size: 9pt !important;
-  }
-
-  .bracket-stage .podium-info strong { color: #000 !important; font-size: 10.5pt !important; }
-  .bracket-stage .podium-info small { color: #333 !important; font-size: 8pt !important; }
-
-  /* ---------- پاک‌سازی عمومی ---------- */
-  .bracket-stage,
-  .bracket-stage * {
-    background-image: none !important;
-    text-shadow: none !important;
-  }
-
-  .match-card,
-  .round-heading,
-  .final-badge,
-  .champion-card,
-  .podium-card,
-  .final-match-card {
-    box-shadow: none !important;
-  }
-
-
-
-  .match-card {
-    break-inside: avoid;
-    page-break-inside: avoid;
-  }
-
-  * {
-    -webkit-print-color-adjust: exact !important;
-    print-color-adjust: exact !important;
-  }
-
-  @page {
-    size: A4 landscape;
-    margin: 4mm;
-  }
-
-  .bracket-stage .final-column,
-  .bracket-stage .final-track,
-  .bracket-stage .final-match-anchor {
-    width: 200px !important;
-    min-width: 0 !important;
-    max-width: 400px !important;
-    box-sizing: border-box !important;
-  }
-
-  .bracket-stage .final-heading-spacer,
-  .bracket-stage .final-badge,
-  .bracket-stage .final-match-card,
-  .bracket-stage .empty-final-card,
-  .bracket-stage .champion-card,
-  .bracket-stage .podium-card {
-    width: 100% !important;
-    min-width: 0 !important;
-    max-width: 100% !important;
-    box-sizing: border-box !important;
-  }
+  @page { size:A4 landscape; margin:6mm; }
+  html, body { margin:0 !important; padding:0 !important; background:white !important; }
+  body * { visibility:hidden; }
+  #bracket-print-root, #bracket-print-root * { visibility:visible; }
+  .no-print { display:none !important; }
+  #bracket-print-root { position:absolute; top:0; left:0; width:285mm; min-height:0; padding:0 !important; background:white !important; }
 }
+
+/* Physical A4 layout is shared by the preview and the printed page. */
+#bracket-print-root * { box-sizing:border-box; box-shadow:none !important; text-shadow:none !important; }
+#bracket-print-root .category-page { width:285mm; margin:0 !important; border:0; border-radius:0; break-after:page; break-inside:avoid; overflow:visible; }
+#bracket-print-root .category-page:last-child { break-after:auto; }
+#bracket-print-root .pdf-header { height:22mm; padding:2mm; border:0; border-bottom:.4mm solid #0f172a; border-radius:0; background:white; gap:3mm; }
+#bracket-print-root .header-title { color:#000; font-size:13pt; line-height:1.4; }
+#bracket-print-root .header-org, #bracket-print-root .header-part { color:#334155; font-size:8pt; }
+#bracket-print-root .header-pill { color:#000 !important; background:white !important; border:.2mm solid #64748b; font-size:8pt !important; padding:1mm 2mm !important; border-radius:1mm; }
+#bracket-print-root .bracket-scroll-container { overflow:visible; padding:0; background:white; }
+#bracket-print-root .bracket-stage { --column-width:36mm; --final-column-width:36mm; --column-gap:3mm; --slot-height:11mm; --card-height:33mm; --row-height:34mm; --row-gap:2mm; --meta-height:4mm; min-width:0; width:max-content; height:164mm; min-height:164mm; margin:0 auto; padding:3mm 0 0; background:white; zoom:1; }
+#bracket-print-root .bracket-stage.size-2 { width:100%; }
+#bracket-print-root .bracket-stage .final-column { width:var(--final-column-width); }
+#bracket-print-root .round-heading { height:9mm; min-height:9mm; max-height:9mm; margin-bottom:2mm; padding:1mm; border:0; border-bottom:.2mm solid #64748b; border-radius:0; background:white; color:#000; }
+#bracket-print-root .round-heading span { font-size:8pt; }
+#bracket-print-root .round-heading small { font-size:6.5pt; color:#475569; }
+#bracket-print-root .match-card { height:var(--card-height); min-height:var(--card-height); max-height:var(--card-height); padding:1mm; border:.25mm solid #64748b; border-radius:1mm; display:flex; flex-direction:column; background:white; overflow:visible; }
+#bracket-print-root .match-meta { min-height:4mm; margin:0 0 .5mm; }
+#bracket-print-root .match-tag { font-size:8pt; line-height:1.3; border:0; padding:0; color:#000; background:white; white-space:normal; font-weight:900; }
+#bracket-print-root .athlete-slot { flex:1 1 0; min-height:0; padding:.5mm; gap:.7mm; border:0; border-radius:0; color:#000; background:white; }
+#bracket-print-root .athlete-name { font-size:9pt; line-height:1.25; color:#000; }
+#bracket-print-root .athlete-affiliation { margin-top:.4mm; font-size:7.5pt; line-height:1.2; color:#222; }
+#bracket-print-root .athlete-placeholder { font-size:7.5pt; line-height:1.4; }
+#bracket-print-root .athlete-color-marker { width:1mm; height:5mm; flex:0 0 1mm; border:.2mm solid #334155; border-radius:0; }
+#bracket-print-root .winner-slot { border-right:.6mm solid #000; }
+#bracket-print-root .next-match-label { font-size:6.5pt; padding-top:.5mm; color:#111; }
+#bracket-print-root .match-node::before, #bracket-print-root .match-node::after, #bracket-print-root .bracket-match-card::before, #bracket-print-root .bracket-match-card::after, #bracket-print-root .final-match-anchor::before, #bracket-print-root .final-match-anchor::after { background:#475569; }
+#bracket-print-root .final-badge { min-height:8mm; bottom:calc(100% + 2mm); padding:1mm; border:.3mm solid #334155; border-radius:1mm; background:white; color:#000; }
+#bracket-print-root .final-badge-icon { display:none; }
+#bracket-print-root .final-badge strong { font-size:9pt; color:#000; }
+#bracket-print-root .final-badge small { font-size:7pt; color:#334155; }
+#bracket-print-root .champion-card { top:calc(100% + 2mm); min-height:14mm; padding:1mm; background:white; }
+#bracket-print-root .champion-crown { display:none; }
+#bracket-print-root .champion-content strong { font-size:8pt; white-space:normal; }
+#bracket-print-root .podium-card { top:calc(100% + 20mm); padding:1mm; gap:1mm; }
+#bracket-print-root .podium-row { padding:.6mm; gap:1mm; background:white; }
+#bracket-print-root .podium-info strong { font-size:7pt; white-space:normal; }
+#bracket-print-root .podium-info small { font-size:6pt; white-space:normal; }
+#bracket-print-root .bracket-page-footer { min-height:8mm; padding:1mm; font-size:7.5pt; align-items:center; }
+@media screen {
+  #bracket-print-root { overflow-x: auto; }
+  #bracket-print-root .category-page { margin: 0 auto 24px !important; border: 1px solid #cbd5e1; }
+}
+
+/* A full 32-slot draw on one landscape A4 sheet. */
+#bracket-print-root .bracket-stage.size-32 {
+  --column-width:25mm; --final-column-width:29mm; --column-gap:2mm;
+  --card-height:19mm; --row-height:19mm; --row-gap:.5mm;
+  --slot-height:7mm; --meta-height:2.5mm;
+  height:166mm; min-height:166mm;
+}
+#bracket-print-root .size-32 .round-heading { height:6mm; min-height:6mm; max-height:6mm; margin-bottom:1mm; padding:.5mm; }
+#bracket-print-root .size-32 .left-flow .round-column:first-child,
+#bracket-print-root .size-32 .right-flow .round-column:last-child { --column-width:40mm; }
+#bracket-print-root .size-32 .left-flow .round-column:not(:first-child) .match-card,
+#bracket-print-root .size-32 .right-flow .round-column:not(:last-child) .match-card,
+#bracket-print-root .size-32 .final-match-card { --card-height:29mm; }
+#bracket-print-root .size-32 .round-heading span { font-size:7.5pt; }
+#bracket-print-root .size-32 .match-card { padding:.4mm .6mm; border-color:#94a3b8; border-radius:.6mm; }
+#bracket-print-root .size-32 .match-meta { min-height:2.5mm; height:2.5mm; margin:0; }
+#bracket-print-root .match-tag { direction:ltr; unicode-bidi:isolate; font-family:Vazirmatn,sans-serif; letter-spacing:.3px; }
+#bracket-print-root .size-32 .match-tag { font-size:7.5pt; line-height:1; }
+#bracket-print-root .size-32 .athlete-slot { padding:.2mm; gap:.5mm; }
+#bracket-print-root .size-32 .athlete-name { font-size:7.5pt; line-height:1.1; }
+#bracket-print-root .size-32 .athlete-affiliation { font-size:6.5pt; line-height:1.1; margin-top:.15mm; }
+#bracket-print-root .size-32 .athlete-color-marker { height:3mm; width:.7mm; flex-basis:.7mm; }
+#bracket-print-root .size-32 .athlete-placeholder { font-size:6.5pt; }
+#bracket-print-root .is-final-match { border-color:#334155 !important; background:white !important; }
+
+/* Classic line bracket: names above each rule, teams below it. */
+#bracket-print-root .bracket-stage .match-card {
+  height:100%; min-height:0; max-height:none; padding:0;
+  border:0 !important; border-radius:0; background:transparent !important;
+  overflow:visible; display:block;
+}
+#bracket-print-root .match-node .match-card { position:absolute; inset:0; }
+#bracket-print-root .bracket-stage .athlete-slot {
+  position:absolute; top:25%; left:0; right:0; height:0; min-height:0;
+  padding:0; border:0; border-top:.3mm solid #334155;
+  display:block; background:transparent; overflow:visible;
+}
+#bracket-print-root .bracket-stage .athlete-slot:last-child { top:75%; }
+#bracket-print-root .athlete-details { position:relative; height:0; width:100%; }
+#bracket-print-root .bracket-stage .athlete-name,
+#bracket-print-root .bracket-stage .athlete-placeholder {
+  position:absolute; bottom:.6mm; right:1mm; left:1mm;
+  font-size:8pt; line-height:1.15; text-align:center; font-weight:800;
+}
+#bracket-print-root .bracket-stage .athlete-affiliation {
+  position:absolute; top:.4mm; right:1mm; left:1mm; margin:0;
+  font-size:6.5pt; line-height:1.1; text-align:center; color:#475569;
+}
+#bracket-print-root .athlete-color-marker,
+#bracket-print-root .winner-star { display:none; }
+#bracket-print-root .bracket-stage .match-meta {
+  position:absolute; top:50%; left:0; right:0; height:auto; min-height:0;
+  margin:0; transform:translateY(-50%); text-align:center; justify-content:center;
+}
+#bracket-print-root .bracket-stage .match-tag {
+  display:inline-block; font-size:12pt; line-height:1.1; font-weight:900;
+  background:white; padding:.4mm 1mm; color:#0f172a;
+}
+#bracket-print-root .bracket-stage .is-bye-tag { display:none; }
+#bracket-print-root .match-join { position:absolute; top:25%; bottom:25%; width:0; border-right:.3mm solid #334155; }
+#bracket-print-root .left-flow .match-join { right:0; }
+#bracket-print-root .right-flow .match-join { left:0; }
+#bracket-print-root .match-node::before { display:none; }
+#bracket-print-root .match-node::after,
+#bracket-print-root .bracket-match-card::before,
+#bracket-print-root .bracket-match-card::after { height:.3mm; }
+#bracket-print-root .final-match-anchor .match-card { position:relative; height:34mm; min-height:34mm; }
+#bracket-print-root .final-match-anchor .match-join { right:0; }
+#bracket-print-root .final-badge { border:0; border-bottom:.5mm solid #334155; border-radius:0; }
+#bracket-print-root .final-badge small { display:none; }
+#bracket-print-root .round-heading { border:0; color:#64748b; }
+#bracket-print-root .left-flow .round-column:first-child .match-meta { left:auto; right:0; width:9mm; }
+#bracket-print-root .right-flow .round-column:last-child .match-meta { right:auto; left:0; width:9mm; }
+#bracket-print-root .left-flow .round-column:first-child .athlete-details { width:calc(100% - 9mm); margin-right:9mm; }
+#bracket-print-root .right-flow .round-column:last-child .athlete-details { width:calc(100% - 9mm); margin-left:9mm; }
+#bracket-print-root .bracket-stage .match-tag { padding:.4mm; }
 </style>
