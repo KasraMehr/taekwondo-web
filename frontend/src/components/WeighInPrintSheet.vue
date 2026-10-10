@@ -98,6 +98,8 @@ const printDate = computed(() => {
 @media print {
   @page { size: A4 portrait; margin: 10mm; }
   body > #app { display: none !important; }
+  /* The bracket print stylesheet hides all body descendants globally. */
+  body > .weigh-print-preview, body > .weigh-print-preview * { visibility: visible !important; }
   .weigh-print-preview { position: static; padding: 0; background: white; }
   .weigh-print-toolbar { display: none !important; }
   .weigh-print-page { break-after: page; page-break-after: always; }
