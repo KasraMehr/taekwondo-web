@@ -1020,6 +1020,7 @@ func (s *tournamentService) AddAthlete(
 		ProfileID:      cloneStringPointer(input.ProfileID),
 		Coach:          strings.TrimSpace(input.Coach),
 		ID:             athleteID,
+		Number:         nextAthleteNumber(tournament.Athletes),
 		Name:           name,
 		Club:           club,
 		WeightCategory: weightCategory,
@@ -1321,4 +1322,14 @@ func athleteIsReferencedByMatches(
 	}
 
 	return false
+}
+
+func nextAthleteNumber(athletes []TournamentAthlete) int {
+	maxNumber := 0
+	for _, a := range athletes {
+		if a.Number > maxNumber {
+			maxNumber = a.Number
+		}
+	}
+	return maxNumber + 1
 }

@@ -2,6 +2,7 @@ import type { AgeCategory, Gender } from './data/categories'
 
 export interface Athlete {
     id: string;
+    number?: number;
     sourceLeagueAthleteId?: string;
     name: string;
     club: string;

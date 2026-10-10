@@ -15,6 +15,14 @@
       <button
           v-if="athletes.length"
           type="button"
+          class="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-bold text-slate-700 hover:bg-slate-100"
+          @click="printBlankSheet"
+      >
+        🖨️ پیش‌نمایش فرم خام
+      </button>
+      <button
+          v-if="athletes.length"
+          type="button"
           :disabled="bulkApproving || countByStatus.pending + countByStatus.failed === 0"
           class="mr-auto rounded-lg bg-emerald-600 px-4 py-2 text-sm font-bold text-white shadow-sm hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-40"
           @click="approveAll"
@@ -226,7 +234,7 @@
               :class="rowTint(a)"
           >
             <td class="px-4 py-3 text-slate-400">
-              {{ toFa(i + 1) }}
+              {{ toFa(displayNumber(a)) }}
             </td>
 
             <td class="px-4 py-3 font-medium text-slate-800">
@@ -647,6 +655,16 @@
       </div>
     </div>
   </div>
+    <Teleport to="body">
+      <WeighInPrintSheet
+        v-if="printOpen"
+        :tournament="store.currentTournament"
+        :groups="printGroups"
+        :max-attempts="printMaxAttempts"
+        @close="printOpen = false"
+        @print="printCurrentSheet"
+      />
+    </Teleport>
 </template>
 
 <script setup>
@@ -654,6 +672,8 @@ import { ref, computed, nextTick, onMounted } from 'vue'
 import { useTournamentStore } from '../stores/tournament'
 import { WEIGHT_CATEGORIES } from '../data/categories'
 import { parseCategory, checkWeight, MAX_ATTEMPTS, TOLERANCE_KG } from '../utils/weighIn'
+import WeighInPrintSheet from './WeighInPrintSheet.vue'
+import { webApi } from '../webApi'
 
 const store = useTournamentStore()
 const athletes = computed(() => store.currentTournament?.athletes ?? [])
@@ -667,6 +687,47 @@ const filterStatus = ref('')
 const groupBy = ref('weight')
 const searchInput = ref(null)
 const bulkApproving = ref(false)
+const printOpen = ref(false)
+const printMaxAttempts = ref(MAX_ATTEMPTS)
+const weighInNumbers = computed(() => {
+  const ordered = [...athletes.value].sort((a, b) => {
+    const weightA = weightIndex.value[String(a.weightCategory)] ?? 999
+    const weightB = weightIndex.value[String(b.weightCategory)] ?? 999
+    return weightA - weightB
+      || weightNum(a.weightCategory) - weightNum(b.weightCategory)
+      || (a.number ?? 0) - (b.number ?? 0)
+      || String(a.id).localeCompare(String(b.id))
+  })
+  return new Map(ordered.map((athlete, index) => [athlete.id, index + 1]))
+})
+function displayNumber(athlete) { return weighInNumbers.value.get(athlete.id) ?? 0 }
+const printGroups = computed(() => weights.value.map(weight => ({
+  weight,
+  label: weightLabel(weight),
+  athletes: athletes.value.filter(a => a.weightCategory === weight)
+    .sort((a, b) => displayNumber(a) - displayNumber(b))
+    .map(a => ({ ...a, number: displayNumber(a) })),
+})).filter(group => group.athletes.length))
+
+function printBlankSheet() {
+  printOpen.value = true
+  if (tid.value) {
+    webApi().call(`/tournaments/${tid.value}/settings`)
+      .then(settings => {
+        const configured = Number(settings?.weighIn?.maxAttempts)
+        if (Number.isInteger(configured) && configured >= 1 && configured <= 10) {
+          printMaxAttempts.value = configured
+        }
+      })
+      .catch(() => {})
+  }
+}
+
+async function printCurrentSheet() {
+  await nextTick()
+  await document.fonts.ready
+  window.print()
+}
 
 async function approveAll() {
   const remaining = countByStatus.value.pending + countByStatus.value.failed
@@ -988,7 +1049,7 @@ const groupedAthletes = computed(() => {
     const athletesInGroup = [...group.athletes].sort(
         groupBy.value === 'club'
             ? compareByWeightThenStatusThenName
-            : compareByStatusAndName,
+            : (a, b) => displayNumber(a) - displayNumber(b),
     )
 
     const done = athletesInGroup.filter(isFinal).length

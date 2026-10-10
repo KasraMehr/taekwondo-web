@@ -177,6 +177,7 @@ type TournamentAthlete struct {
 	ProfileID      *string  `json:"profileId,omitempty"`
 	Coach          string   `json:"coach,omitempty"`
 	ID             string   `json:"id"`
+	Number         int      `json:"number,omitempty"`
 	Name           string   `json:"name"`
 	Club           string   `json:"club"`
 	WeightCategory string   `json:"weightCategory"`

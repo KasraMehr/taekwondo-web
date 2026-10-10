@@ -110,6 +110,7 @@ func (r *tournamentRepository) GetByID(ctx context.Context, id string) (*Tournam
 	if err != nil {
 		return nil, err
 	}
+	assignAthleteNumbers(t.Athletes)
 	rows, err = r.db.Query(ctx, `SELECT data FROM tournament_matches WHERE tournament_id=$1 ORDER BY (data->>'round')::int,(data->>'bracketIndex')::int,id`, id)
 	if err != nil {
 		return nil, err
@@ -266,5 +267,27 @@ func normalizeTournamentCollections(t *Tournament) {
 	}
 	if t.EliminationMatches == nil {
 		t.EliminationMatches = []EliminationMatch{}
+	}
+}
+
+// Legacy entries are loaded in athlete-ID order; keep assigned numbers and
+// give any unnumbered entry a new, unique number.
+func assignAthleteNumbers(athletes []TournamentAthlete) {
+	maxNumber := 0
+	for _, a := range athletes {
+		if a.Number > maxNumber {
+			maxNumber = a.Number
+		}
+	}
+	seen := make(map[int]bool, len(athletes))
+	for i := range athletes {
+		number := athletes[i].Number
+		if number > 0 && !seen[number] {
+			seen[number] = true
+			continue
+		}
+		maxNumber++
+		athletes[i].Number = maxNumber
+		seen[maxNumber] = true
 	}
 }

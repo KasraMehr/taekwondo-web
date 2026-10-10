@@ -29,11 +29,26 @@ import { webApi } from "../webApi";
 
 const STORAGE_KEY = "tkd_tournaments"
 
+function ensureAthleteNumbers(athletes: Athlete[]): Athlete[] {
+    const ordered = [...athletes].sort((a, b) => a.id.localeCompare(b.id))
+    const seen = new Set<number>()
+    let next = Math.max(0, ...athletes.map(a => a.number ?? 0)) + 1
+    for (const athlete of ordered) {
+        if (athlete.number && athlete.number > 0 && !seen.has(athlete.number)) {
+            seen.add(athlete.number)
+        } else {
+            athlete.number = next++
+            seen.add(athlete.number)
+        }
+    }
+    return athletes
+}
+
 export const useTournamentStore = defineStore("tournament", () => {
     const tournaments = ref<Tournament[]>(
         (JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]") as Tournament[]).map((t) => ({
             ...t,
-            athletes: t.athletes.map(migrateWeighIn),
+            athletes: ensureAthleteNumbers(t.athletes.map(migrateWeighIn)),
         }))
     )
 
@@ -47,6 +62,7 @@ export const useTournamentStore = defineStore("tournament", () => {
     )
 
     function replaceFromServer(tournament: Tournament) {
+        tournament.athletes = ensureAthleteNumbers(tournament.athletes)
         const index = tournaments.value.findIndex(item => item.id === tournament.id)
         if (index === -1) tournaments.value.push(tournament)
         else tournaments.value[index] = tournament
@@ -163,6 +179,7 @@ export const useTournamentStore = defineStore("tournament", () => {
         const created = {
             ...athlete,
             weighIn: athlete.weighIn ?? emptyWeighIn(),
+            number: Math.max(0, ...t.athletes.map(a => a.number ?? 0)) + 1,
             id: crypto.randomUUID(),
         }
         t.athletes.push(created)
@@ -202,6 +219,7 @@ export const useTournamentStore = defineStore("tournament", () => {
         if (idx !== -1) {
             t.athletes[idx] = {
                 ...athlete,
+                number: previous.number,
                 // وزن‌کشی از فرم ویرایش دست‌کاری نمی‌شود؛ فقط از متدهای اختصاصی
                 weighIn: t.athletes[idx].weighIn ?? athlete.weighIn ?? emptyWeighIn(),
             }
@@ -955,7 +973,7 @@ export const useTournamentStore = defineStore("tournament", () => {
             existing.courts = Number(parsed.courts) || existing.courts
             existing.gender = (parsed.gender ?? existing.gender) as Gender
             existing.ageCategory = (parsed.ageCategory ?? existing.ageCategory) as AgeCategory
-            existing.athletes = (parsed.athletes as any[]).map(migrateWeighIn)
+            existing.athletes = ensureAthleteNumbers((parsed.athletes as any[]).map(migrateWeighIn))
             existing.matches = parsed.matches
             existing.courtAssignment = parsed.courtAssignment ?? {}
             existing.updatedAt = new Date().toISOString()
@@ -968,7 +986,7 @@ export const useTournamentStore = defineStore("tournament", () => {
         // تورنمنت جاری وجود نداشت: رکورد جدید ساخته و همان انتخاب می‌شود
         const created: Tournament = {
             ...parsed,
-            athletes: (parsed.athletes as any[]).map(migrateWeighIn),
+            athletes: ensureAthleteNumbers((parsed.athletes as any[]).map(migrateWeighIn)),
             id: crypto.randomUUID(),
             name: String(parsed.name ?? "مسابقه ایمپورت‌شده"),
             date: String(parsed.date ?? ""),
