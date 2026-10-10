@@ -47,6 +47,12 @@ func (a *API) publicOVR(r *Request) (any, error) {
 		if _, err := uuid.Parse(id); err != nil {
 			return nil, bad("invalid tournamentId")
 		}
+	} else if r.C.Query("slot") != "" {
+		var err error
+		id, err = a.tournamentForPublicSlot(r)
+		if err != nil {
+			return nil, err
+		}
 	} else {
 		err := r.Tx.QueryRow(r.Context(), `SELECT t.id::text FROM tournaments t WHERE EXISTS(SELECT 1 FROM tournament_matches m WHERE m.tournament_id=t.id AND COALESCE((m.data->>'isBye')::boolean,false)=false AND m.data->>'status' IN ('ongoing','pending')) ORDER BY t.event_date DESC,t.updated_at DESC LIMIT 1`).Scan(&id)
 		if errors.Is(err, pgx.ErrNoRows) {

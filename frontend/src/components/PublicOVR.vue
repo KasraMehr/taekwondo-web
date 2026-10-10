@@ -5,7 +5,9 @@ type Court={court:number;current:Match|null;upcoming:Match[]}
 const data=ref<{tournament:null|{id:string;name:string;courts:number;revision:number};courts:Court[]}>({tournament:null,courts:[]})
 const loading=ref(true);const error=ref('');const justUpdated=ref(false);let timer:number|undefined;let updateTimer:number|undefined
 const tournamentId=new URLSearchParams(location.search).get('tournamentId')
-async function load(){try{const q=tournamentId?`?tournamentId=${encodeURIComponent(tournamentId)}`:'';const response=await fetch(`/api/v1/public/ovr${q}`);if(!response.ok)throw new Error('دریافت برنامه زمین‌ها ناموفق بود');const next=await response.json();if(data.value.tournament&&next.tournament?.revision!==data.value.tournament.revision){justUpdated.value=true;if(updateTimer)clearTimeout(updateTimer);updateTimer=window.setTimeout(()=>justUpdated.value=false,1200)}data.value=next;error.value=''}catch(e:any){error.value=e?.message||'ارتباط با سرور برقرار نشد'}finally{loading.value=false}}
+const slot=location.pathname.match(/^\/ovr\/([1-9]\d*)\/?$/i)?.[1]
+const eventDate=new URLSearchParams(location.search).get('date')
+async function load(){try{const q=tournamentId?`?tournamentId=${encodeURIComponent(tournamentId)}`:slot?`?slot=${slot}${eventDate?`&date=${encodeURIComponent(eventDate)}`:''}`:'';const response=await fetch(`/api/v1/public/ovr${q}`);if(!response.ok)throw new Error('دریافت برنامه زمین‌ها ناموفق بود');const next=await response.json();if(data.value.tournament&&next.tournament?.revision!==data.value.tournament.revision){justUpdated.value=true;if(updateTimer)clearTimeout(updateTimer);updateTimer=window.setTimeout(()=>justUpdated.value=false,1200)}data.value=next;error.value=''}catch(e:any){error.value=e?.message||'ارتباط با سرور برقرار نشد'}finally{loading.value=false}}
 const roundLabel=(m:Match)=>m.side==='final'?'فینال':m.side==='semifinal'?'نیمه‌نهایی':`دور ${m.round}`
 const courtLetter=(court:number)=>String.fromCharCode(64+Math.max(1,Math.min(26,court)))
 const viewportWidth=ref(window.innerWidth)
