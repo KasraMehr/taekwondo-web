@@ -19,6 +19,7 @@ export interface Match {
     winnerId?: string
     court: number
     order: number
+    day?: number
     status?: 'pending' | 'ongoing' | 'completed'
     result?: MatchResult
     bracketIndex?: number

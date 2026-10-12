@@ -89,17 +89,10 @@ func applyCourtPlanSingleDay(t *Tournament) {
 			courts = []int{settings.SingleCourt}
 		case "split_halves":
 			courts = courts[:min(2, t.Courts)]
-		default:
-			// Balanced mode distributes playable matches, rather than whole
-			// categories, across every court. Keeping a full category on one
-			// court creates a large imbalance when category count is not a
-			// multiple of court count.
+		case "balanced":
+			courts = courts[:categoryCourtCount(stat.load, len(courts))]
 		}
-		if settings.Mode == "balanced" {
-			assignCategoryCourtsBalanced(t.Matches, stat.category, courts, loads)
-		} else {
-			assignCategoryCourts(t.Matches, stat.category, courts)
-		}
+		assignCategoryCourts(t.Matches, stat.category, courts)
 		used := map[int]bool{}
 		maxRound := 0
 		for _, m := range t.Matches {
@@ -125,12 +118,16 @@ func applyCourtPlanSingleDay(t *Tournament) {
 			}
 		}
 	}
-	if settingsFor(t).Numbering.Order == "category" {
-		syncCategoryOrders(t)
-	} else {
-		syncMatchOrders(t.Matches)
-	}
+	syncCategoryOrders(t)
 	t.CourtAssignment = assignment
+}
+
+// A large bracket can use two fixed halves; smaller categories stay on one court.
+func categoryCourtCount(playable, available int) int {
+	if playable >= 16 && available >= 2 {
+		return 2
+	}
+	return 1
 }
 func syncCategoryOrders(t *Tournament) {
 	ranks := map[string]int{}
@@ -410,12 +407,16 @@ func applyHoguCourtPlan(t *Tournament) error {
 		})
 		if scheduleMode == "split_halves" && len(compatible) > 2 {
 			compatible = compatible[:2]
+		} else if scheduleMode == "balanced" {
+			playable := 0
+			for _, match := range t.Matches {
+				if match.WeightCategory == category && !lifecycleIsBye(&match) {
+					playable++
+				}
+			}
+			compatible = compatible[:categoryCourtCount(playable, len(compatible))]
 		}
-		if scheduleMode == "balanced" {
-			assignCategoryCourtsBalanced(t.Matches, category, compatible, loads)
-		} else {
-			assignCategoryCourts(t.Matches, category, compatible)
-		}
+		assignCategoryCourts(t.Matches, category, compatible)
 		for i := range t.Matches {
 			if court, ok := moved[t.Matches[i].ID]; ok {
 				t.Matches[i].Court = court
@@ -432,11 +433,7 @@ func applyHoguCourtPlan(t *Tournament) error {
 		}
 		t.CourtAssignment[category] = used
 	}
-	if settingsFor(t).Numbering.Order == "category" {
-		syncCategoryOrders(t)
-	} else {
-		syncMatchOrders(t.Matches)
-	}
+	syncCategoryOrders(t)
 	return nil
 }
 
