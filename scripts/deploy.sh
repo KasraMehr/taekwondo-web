@@ -117,7 +117,7 @@ docker run --rm \
   -v "$build_dir/frontend:/app" \
   -w /app \
   "$NODE_IMAGE" \
-  sh -c 'npm ci && npm run build'
+  sh -c 'npm ci --registry=https://registry.npmjs.org/ --replace-registry-host=always && npm run build'
 [[ -s "$build_dir/frontend/dist/index.html" ]] || {
   echo "Frontend build did not produce dist/index.html." >&2
   exit 1
