@@ -718,6 +718,8 @@ function printBlankSheet() {
 async function printCurrentSheet() {
   await nextTick()
   await document.fonts.ready
+  document.body.classList.add('weigh-print-mode')
+  window.addEventListener('afterprint', () => document.body.classList.remove('weigh-print-mode'), { once: true })
   window.print()
 }
 

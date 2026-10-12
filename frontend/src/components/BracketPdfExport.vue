@@ -1278,6 +1278,8 @@ async function print(): Promise<void> {
 
   requestAnimationFrame(() => {
     requestAnimationFrame(() => {
+      document.body.classList.add('bracket-print-mode')
+      window.addEventListener('afterprint', () => document.body.classList.remove('bracket-print-mode'), { once: true })
       window.print()
     })
   })
@@ -1294,12 +1296,14 @@ async function printCategory(
 
   requestAnimationFrame(() => {
     requestAnimationFrame(() => {
+      document.body.classList.add('bracket-print-mode')
       window.print()
     })
   })
 
   const restoreCategory = () => {
     selectedCategory.value = previousCategory
+    document.body.classList.remove('bracket-print-mode')
 
     window.removeEventListener(
         'afterprint',
@@ -2295,11 +2299,13 @@ async function printCategory(
 
 @media print {
   @page { size:A4 landscape; margin:6mm; }
+  @page bracket { size:A4 landscape; margin:6mm; }
   html, body { margin:0 !important; padding:0 !important; background:white !important; }
-  body * { visibility:hidden; }
-  #bracket-print-root, #bracket-print-root * { visibility:visible; }
-  .no-print { display:none !important; }
-  #bracket-print-root { position:absolute; top:0; left:0; width:285mm; min-height:0; padding:0 !important; background:white !important; }
+  body.bracket-print-mode * { visibility:hidden; }
+  body.bracket-print-mode #bracket-print-root, body.bracket-print-mode #bracket-print-root * { visibility:visible; }
+  body.bracket-print-mode .no-print { display:none !important; }
+  body.bracket-print-mode #bracket-print-root { position:absolute; top:0; left:0; width:285mm; min-height:0; padding:0 !important; background:white !important; }
+  body.bracket-print-mode #bracket-print-root .category-page { page: bracket; }
 }
 
 /* Physical A4 layout is shared by the preview and the printed page. */

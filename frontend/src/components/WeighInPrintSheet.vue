@@ -96,13 +96,13 @@ const printDate = computed(() => {
   .weigh-print-page { padding: 10mm; width: 210mm; min-height: 297mm; margin-bottom: 18px; box-shadow: 0 8px 30px #02061755; }
 }
 @media print {
-  @page { size: A4 portrait; margin: 10mm; }
-  body > #app { display: none !important; }
-  /* The bracket print stylesheet hides all body descendants globally. */
-  body > .weigh-print-preview, body > .weigh-print-preview * { visibility: visible !important; }
-  .weigh-print-preview { position: static; padding: 0; background: white; }
-  .weigh-print-toolbar { display: none !important; }
-  .weigh-print-page { break-after: page; page-break-after: always; }
-  .weigh-print-page:last-child { break-after: auto; page-break-after: auto; }
+  @page weigh-in { size: A4 portrait; margin: 10mm; }
+  body.weigh-print-mode > #app { display: none !important; }
+  /* Keep the teleported sheet visible while the app is hidden for this print mode. */
+  body.weigh-print-mode > .weigh-print-preview, body.weigh-print-mode > .weigh-print-preview * { visibility: visible !important; }
+  body.weigh-print-mode .weigh-print-preview { position: static; padding: 0; background: white; }
+  body.weigh-print-mode .weigh-print-toolbar { display: none !important; }
+  body.weigh-print-mode .weigh-print-page { page: weigh-in; break-after: page; page-break-after: always; }
+  body.weigh-print-mode .weigh-print-page:last-child { break-after: auto; page-break-after: auto; }
 }
 </style>
