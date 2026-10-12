@@ -13,7 +13,7 @@ const settings=reactive<any>({
   scoring:{pointGap:15,pointGapFromRound:1,gamJeomLimitPerRound:5,roundsToWin:2,maxRounds:3},
   weighIn:{maxAttempts:2,toleranceKg:.2},draw:{type:'ranked',separateTeams:true},
   schedule:{mode:'balanced',singleCourt:1,finalCourtPolicy:'primary',finalCourt:1,dayAssignment:'alternating',days:[],categoryDays:{}},
-  numbering:{startAt:1,scope:'tournament',order:'rounds'},
+  numbering:{startAt:1,scope:'court_day',order:'category'},
   hogu:{enabled:false,courtSizes:{},categorySizes:{}}
 })
 const hoguSizes=['1','2','3','4']
@@ -21,7 +21,7 @@ const categories=computed(()=>tournament.value?weightOptions(tournament.value.ag
 function defaultHoguSize(category:string){const weight=Number(category.replace(/[+-]/g,''));if(!Number.isFinite(weight))return '1';if(weight<=40)return '1';if(weight<=55)return '2';if(weight<=70)return '3';return '4'}
 function fillDefaultHoguSizes(){for(const category of categories.value)if(!hoguSizes.includes(String(settings.hogu.categorySizes[category]||'')))settings.hogu.categorySizes[category]=defaultHoguSize(category)}
 function resetHoguDefaults(){for(const category of categories.value)settings.hogu.categorySizes[category]=defaultHoguSize(category)}
-function merge(raw:any){for(const section of ['scoring','weighIn','draw','schedule','numbering','hogu'])Object.assign(settings[section],raw?.[section]||{});if(!Array.isArray(settings.schedule.days))settings.schedule.days=[];if(!settings.hogu.courtSizes)settings.hogu.courtSizes={};if(!settings.hogu.categorySizes)settings.hogu.categorySizes={};for(const court of Object.keys(settings.hogu.courtSizes))settings.hogu.courtSizes[court]=(settings.hogu.courtSizes[court]||[]).filter((size:string)=>hoguSizes.includes(String(size)));fillDefaultHoguSizes()}
+function merge(raw:any){for(const section of ['scoring','weighIn','draw','schedule','numbering','hogu'])Object.assign(settings[section],raw?.[section]||{});settings.numbering.order='category';if(!Array.isArray(settings.schedule.days))settings.schedule.days=[];if(!settings.hogu.courtSizes)settings.hogu.courtSizes={};if(!settings.hogu.categorySizes)settings.hogu.categorySizes={};for(const court of Object.keys(settings.hogu.courtSizes))settings.hogu.courtSizes[court]=(settings.hogu.courtSizes[court]||[]).filter((size:string)=>hoguSizes.includes(String(size)));fillDefaultHoguSizes()}
 function courtHasSize(court:number,size:string){return (settings.hogu.courtSizes[court]??[]).includes(size)}
 function toggleCourtSize(court:number,size:string){const list=[...(settings.hogu.courtSizes[court]??[])];settings.hogu.courtSizes[court]=list.includes(size)?list.filter((x:string)=>x!==size):[...list,size]}
 async function load(){if(!tournament.value)return;loading.value=true;error.value='';try{const [opts,current]=await Promise.all([webApi().call<any>('/tournament-settings-options'),webApi().call<any>(`/tournaments/${tournament.value.id}/settings`)]);Object.assign(options,opts||{});merge(current)}catch(e:any){error.value=e?.message||'دریافت تنظیمات ناموفق بود'}finally{loading.value=false}}

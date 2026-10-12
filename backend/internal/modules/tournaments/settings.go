@@ -75,7 +75,7 @@ func DefaultSettings(date time.Time) TournamentSettings {
 		WeighIn:   WeighInSettings{MaxAttempts: 2, ToleranceKg: 0.2},
 		Draw:      DrawSettings{Type: "random", SeparateTeams: true},
 		Schedule:  ScheduleSettings{Mode: "balanced", SingleCourt: 1, FinalCourtPolicy: "primary", FinalCourt: 1, DayAssignment: "manual", Days: []EventDay{{Day: 1, Date: date.Format("2006-01-02"), Label: "روز اول"}}, CategoryDays: map[string]int{}},
-		Numbering: NumberingSettings{StartAt: 1, Scope: "tournament", Order: "rounds"},
+		Numbering: NumberingSettings{StartAt: 1, Scope: "court_day", Order: "category"},
 		Hogu:      HoguSettings{CourtSizes: map[int][]string{}, CategorySizes: map[string]string{}},
 	}
 }

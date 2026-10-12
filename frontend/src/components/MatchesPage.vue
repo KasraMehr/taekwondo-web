@@ -107,7 +107,7 @@ const numberingCourts = computed(() => Array.from({ length: t.value?.courts ?? 0
   const court = index + 1
   const courtMatches = (numberingPreview.value?.matches ?? [])
       .filter((match: Match) => match.court === court && !match.isBye)
-      .sort((a: Match, b: Match) => a.order - b.order)
+      .sort((a: Match, b: Match) => (a.day ?? 1) - (b.day ?? 1) || a.order - b.order)
   return { court, matches: courtMatches }
 }))
 
@@ -164,7 +164,7 @@ function athleteDisplayName(id: string | null, matchId: string, slot: 1 | 2): st
 }
 
 function matchLabel(match: Match): string {
-  return `${courtLabel(match.court)}${match.order}`
+  return `${courtLabel(match.court)}${match.matchNumber ?? match.order}`
 }
 
 // ─── دسته‌بندی‌ها ─────────────────────────────────────────────────────────
@@ -291,15 +291,15 @@ const textSwapMessage = ref('')
 
 function findMatchByCode(code: string): Match | null {
   const upper = code.trim().toUpperCase()
-  // فرمت: حرف زمین + شماره ترتیب (مثل A3 یا B12)
+  // فرمت: حرف زمین + شماره نمایشی (مثل A3 یا B12)
   const match = upper.match(/^([A-F])(\d+)$/)
   if (!match) return null
   const courtIdx = COURT_LABELS.indexOf(match[1])
   if (courtIdx === -1) return null
   const court = courtIdx + 1
-  const order = parseInt(match[2])
+  const number = parseInt(match[2])
   const col = localColumns.value[court] ?? []
-  return col.find((m: Match) => m.order === order) ?? null
+  return col.find((m: Match) => (m.matchNumber ?? m.order) === number) ?? null
 }
 
 const previewA = computed(() => findMatchByCode(textSwapCodeA.value))
@@ -542,7 +542,7 @@ function doTextSwap() {
     <template v-else-if="activeTab === 'schedule'">
 
       <div class="flex flex-wrap items-center gap-3 rounded-xl border border-indigo-100 bg-indigo-50 p-4">
-        <div class="min-w-0 flex-1"><div class="text-sm font-bold text-indigo-950">تخصیص زمین و شماره‌گذاری</div><div class="mt-1 text-xs text-indigo-700">پیش‌نمایش صف هر زمین را ببینید و بعد شماره‌ها را ثبت کنید. تنظیم سایز هوگو در تنظیمات مسابقه است.</div></div>
+        <div class="min-w-0 flex-1"><div class="text-sm font-bold text-indigo-950">تخصیص زمین و شماره‌گذاری</div><div class="mt-1 text-xs text-indigo-700">بازی‌های هر وزن تا جای ممکن پشت سر هم روی یک زمین قرار می‌گیرند. برای شماره‌های A1 و B1، محدودهٔ شماره‌گذاری را در تنظیمات روی «هر زمین در هر روز» بگذارید.</div></div>
         <button :disabled="numberingBusy||!numberingReadiness?.ready" class="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-bold text-white disabled:opacity-50" @click="previewNumbering">{{numberingBusy?'در حال آماده‌سازی…':numberingReadiness?.ready?'پیش‌نمایش شماره‌گذاری':'پس از تکمیل قرعهٔ همهٔ وزن‌ها'}}</button>
         <p v-if="numberingError" class="w-full rounded-lg bg-rose-100 px-3 py-2 text-xs text-rose-800">{{numberingError}}</p>
       </div>
@@ -718,9 +718,9 @@ function doTextSwap() {
 
   <div v-if="numberingPreview" class="fixed inset-0 z-[70] grid place-items-center bg-slate-950/50 p-4" @click.self="numberingPreview=null">
     <section class="max-h-[90vh] w-full max-w-4xl overflow-auto rounded-2xl bg-white p-5 shadow-2xl" dir="rtl">
-      <div class="flex items-start justify-between gap-3"><div><h3 class="text-lg font-black text-slate-900">پیش‌نمایش صف و شمارهٔ زمین‌ها</h3><p class="mt-1 text-sm text-slate-500">شماره‌ها مطابق ترتیب اجرای هر زمین و تقدم مراحل براکت ساخته شده‌اند.</p></div><button class="rounded-lg px-3 py-1 text-slate-500 hover:bg-slate-100" @click="numberingPreview=null">بستن</button></div>
+      <div class="flex items-start justify-between gap-3"><div><h3 class="text-lg font-black text-slate-900">پیش‌نمایش صف و شمارهٔ زمین‌ها</h3><p class="mt-1 text-sm text-slate-500">هر بخش یک وزن است؛ بازی‌های هر زمین به ترتیب اجرا نمایش داده شده‌اند.</p></div><button class="rounded-lg px-3 py-1 text-slate-500 hover:bg-slate-100" @click="numberingPreview=null">بستن</button></div>
       <div class="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-        <article v-for="court in numberingCourts" :key="court.court" class="rounded-xl border border-slate-200 p-3"><h4 class="mb-2 font-bold">زمین {{courtLabel(court.court)}}</h4><ol class="space-y-1 text-xs"><li v-for="match in court.matches" :key="match.id" class="flex gap-2 border-b border-slate-100 py-1"><b class="shrink-0">{{match.matchNumber}}</b><span>وزن {{match.weightCategory}} · {{athleteDisplayName(match.athlete1Id,match.id,1)}} / {{athleteDisplayName(match.athlete2Id,match.id,2)}}</span></li></ol><p v-if="!court.matches.length" class="text-xs text-slate-400">بازی ندارد</p></article>
+        <article v-for="court in numberingCourts" :key="court.court" class="rounded-xl border border-slate-200 p-3"><h4 class="mb-2 font-bold">زمین {{courtLabel(court.court)}}</h4><ol class="space-y-1 text-xs"><li v-for="(match, index) in court.matches" :key="match.id" class="border-b border-slate-100 py-1"><div v-if="index === 0 || court.matches[index - 1].weightCategory !== match.weightCategory || court.matches[index - 1].day !== match.day" class="mb-1 rounded bg-indigo-50 px-2 py-1 font-bold text-indigo-800">روز {{match.day ?? 1}} · وزن {{match.weightCategory}}</div><div class="flex gap-2"><b class="shrink-0">{{courtLabel(court.court)}}{{match.matchNumber}}</b><span>{{athleteDisplayName(match.athlete1Id,match.id,1)}} / {{athleteDisplayName(match.athlete2Id,match.id,2)}}</span></div></li></ol><p v-if="!court.matches.length" class="text-xs text-slate-400">بازی ندارد</p></article>
       </div>
       <p v-if="numberingError" class="mt-3 rounded-lg bg-rose-50 p-3 text-sm text-rose-700">{{numberingError}}</p>
       <div class="mt-5 flex justify-end gap-2"><button :disabled="numberingBusy" class="rounded-lg border px-4 py-2 text-sm" @click="numberingPreview=null">لغو</button><button :disabled="numberingBusy" class="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-bold text-white disabled:opacity-50" @click="applyNumbering">{{numberingBusy?'در حال ثبت…':'تأیید و ثبت شماره‌ها'}}</button></div>
