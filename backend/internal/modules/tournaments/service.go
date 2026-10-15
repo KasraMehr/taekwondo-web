@@ -93,6 +93,7 @@ var (
 )
 
 type TournamentService interface {
+	ImportSnapshot(context.Context, string, ImportTournamentInput) (*Tournament, error)
 	NumberMatches(context.Context, string, bool) (*Tournament, error)
 	UpdateSettings(context.Context, string, TournamentSettings) (*Tournament, error)
 	RebalanceCourts(context.Context, string) (*Tournament, error)
