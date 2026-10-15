@@ -277,12 +277,6 @@
             @click="onClear"
         >حذف نتیجه</button>
 
-        <button
-            v-if="match.status === 'pending'"
-            class="text-[12.5px] text-amber-700 hover:text-amber-900 px-3 py-2 rounded-lg hover:bg-amber-50 transition"
-            @click="onStart"
-        >شروع بازی</button>
-
         <div class="mr-auto flex gap-2">
           <button
               class="px-4 py-2 rounded-xl border border-slate-200 bg-white text-[12.5px] text-slate-600 hover:bg-slate-100 transition"
@@ -472,10 +466,6 @@ function setManual(i: number, corner: 'blue' | 'red' | null) {
   r.winner = corner
   r.manualWinner = !!corner
   r.endedBy = corner ? 'SUP' : null
-}
-
-function onStart() {
-  store.startMatch(props.tournamentId, props.match.id)
 }
 
 const saving = ref(false)

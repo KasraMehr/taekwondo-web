@@ -103,7 +103,7 @@ func (s *tournamentService) StartMatch(
 	return match, nil
 }
 
-// RecordMatchResult completes an ongoing, non-bye match
+// RecordMatchResult completes a playable pending or ongoing, non-bye match
 // and propagates its winner to the next match.
 //
 // Concurrency requirement:
@@ -149,7 +149,8 @@ func (s *tournamentService) RecordMatchResult(
 		return nil, ErrResultAlreadyExists
 	}
 
-	if status := lifecycleMatchStatus(match); status != MatchStatusOngoing {
+	status := lifecycleMatchStatus(match)
+	if status != MatchStatusOngoing && status != MatchStatusPending {
 		return nil, fmt.Errorf(
 			"%w: cannot record result for match %s with status %q",
 			ErrMatchLocked,
@@ -170,6 +171,14 @@ func (s *tournamentService) RecordMatchResult(
 		match,
 	); err != nil {
 		return nil, err
+	}
+	if status == MatchStatusPending {
+		if err := lifecycleValidateCourt(tournament, match); err != nil {
+			return nil, err
+		}
+		if err := lifecycleValidateAvailability(tournament, index); err != nil {
+			return nil, err
+		}
 	}
 
 	result, err := lifecycleBuildMatchResult(match, input, settingsFor(tournament).Scoring)

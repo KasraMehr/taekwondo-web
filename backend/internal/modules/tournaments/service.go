@@ -605,7 +605,8 @@ func (s *tournamentService) Update(
 		}
 	}
 	oldSettings := settingsFor(tournament)
-	if hasStartedMatches(tournament) && (tournament.Courts != input.Courts || !tournament.Date.Equal(date)) {
+	replanCourts := tournament.Courts != input.Courts || tournament.Gender != input.Gender || tournament.AgeCategory != input.AgeCategory || tournament.Format != input.Format
+	if hasStartedMatches(tournament) && tournament.Courts != input.Courts {
 		return nil, ErrMatchLocked
 	}
 	delta := date.Sub(tournament.Date)
@@ -632,7 +633,7 @@ func (s *tournamentService) Update(
 	if err := validateSettings(tournament, settingsFor(tournament)); err != nil {
 		return nil, err
 	}
-	if !hasStartedMatches(tournament) {
+	if !hasStartedMatches(tournament) && replanCourts {
 		clearMatchNumbers(tournament)
 		if err := applyCourtPlan(tournament); err != nil {
 			return nil, err
