@@ -1507,6 +1507,7 @@ export const useTournamentStore = defineStore("tournament", () => {
         tournaments,
         currentTournamentId,
         currentTournament,
+        replaceFromServer,
         refreshFromServer,
         createTournament,
         deleteTournament,
