@@ -962,46 +962,28 @@ export const useTournamentStore = defineStore("tournament", () => {
         }
 
         const targetId = targetTournamentId ?? currentTournamentId.value
-        const existing = targetId ? tournaments.value.find((x) => x.id === targetId) : null
-
-        if (existing) {
-            // جایگزینی درجا: id تورنمنت و اتصال لیگ (leagueId/stageOrder/weekId) حفظ می‌شود.
-            // idهای ورزشکاران و بازی‌ها عیناً از فایل می‌آیند تا ارجاع‌های براکت
-            // (nextMatchId, nextSlot, winnerId, result و...) دقیقاً سالم بمانند.
-            existing.name = String(parsed.name ?? existing.name)
-            existing.date = String(parsed.date ?? existing.date)
-            existing.courts = Number(parsed.courts) || existing.courts
-            existing.gender = (parsed.gender ?? existing.gender) as Gender
-            existing.ageCategory = (parsed.ageCategory ?? existing.ageCategory) as AgeCategory
-            existing.athletes = ensureAthleteNumbers((parsed.athletes as any[]).map(migrateWeighIn))
-            existing.matches = parsed.matches
-            existing.courtAssignment = parsed.courtAssignment ?? {}
-            existing.updatedAt = new Date().toISOString()
-
-            currentTournamentId.value = existing.id
-            save()
-            return { tournament: existing }
+        if (!targetId || !tournaments.value.some((x) => x.id === targetId)) {
+            return { error: "ابتدا مسابقهٔ مقصد را انتخاب کنید" }
         }
 
-        // تورنمنت جاری وجود نداشت: رکورد جدید ساخته و همان انتخاب می‌شود
-        const created: Tournament = {
-            ...parsed,
-            athletes: ensureAthleteNumbers((parsed.athletes as any[]).map(migrateWeighIn)),
-            id: crypto.randomUUID(),
-            name: String(parsed.name ?? "مسابقه ایمپورت‌شده"),
-            date: String(parsed.date ?? ""),
-            courts: Number(parsed.courts) || 1,
+        // The server keeps the target ID and league linkage and replaces its contents atomically.
+        // Do not touch local state until the database transaction has succeeded.
+        const imported = await webApi().call<Tournament>(`/tournaments/${targetId}/import`, 'POST', {
+            name: parsed.name,
+            date: parsed.date,
+            courts: Number(parsed.courts),
+            gender: parsed.gender,
+            ageCategory: parsed.ageCategory,
+            format: parsed.format ?? 'grandPrix',
+            athletes: ensureAthleteNumbers((parsed.athletes as Athlete[]).map(migrateWeighIn)),
+            matches: parsed.matches,
             courtAssignment: parsed.courtAssignment ?? {},
-            leagueId: null,
-            stageOrder: null,
-            weekId: null,
-            createdAt: new Date().toISOString(),
-            updatedAt: new Date().toISOString(),
-        }
-        tournaments.value.push(created)
-        currentTournamentId.value = created.id
-        save()
-        return { tournament: created }
+            eliminationMatches: parsed.eliminationMatches ?? [],
+            settings: parsed.settings ?? null,
+        })
+        replaceFromServer(imported)
+        currentTournamentId.value = imported.id
+        return { tournament: imported }
     }
 
     // ─────────────────────── جابه‌جایی موقعیت بازی‌ها ───────────────────────

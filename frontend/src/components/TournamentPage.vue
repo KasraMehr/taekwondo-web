@@ -93,10 +93,14 @@ function errMsg(err: unknown) {
 async function onExportExcel() {
   const t = store.currentTournament;
   if (!t) return notify("ابتدا یک مسابقه انتخاب کنید", "error");
-  if (!t.athletes?.length) return notify("هنوز ورزشکاری ثبت نشده", "error");
 
   exporting.value = true;
   try {
+    await store.refreshFromServer(t.id);
+    if (!store.currentTournament?.athletes?.length) {
+      notify("هنوز ورزشکاری ثبت نشده", "error");
+      return;
+    }
     const result = store.exportTournamentToExcel(t.id);
     if (result.error) {
       notify(`خطا در خروجی اکسل: ${result.error}`, "error");
@@ -121,8 +125,11 @@ async function onImportExcel(e: Event) {
 
   importing.value = true;
   try {
-    // 👇 اسم واقعی تابع خودت را بگذار
-    await store.importTournamentFromExcel(file);
+    const result = await store.importTournamentFromExcel(file);
+    if (result.error) {
+      notify(`خطا در ایمپورت: ${result.error}`, "error");
+      return;
+    }
     notify("ایمپورت با موفقیت انجام شد");
   } catch (err) {
     notify(`خطا در ایمپورت: ${errMsg(err)}`, "error");

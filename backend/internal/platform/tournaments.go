@@ -89,6 +89,9 @@ func (a *API) tournamentRoutes(org *gin.RouterGroup) {
 	group.PUT("/:tournament", tournamentBody(a, permTournamentsManage, func(r *Request, in tournaments.UpdateTournamentInput) (any, error) {
 		return r.Service().Update(r.Context(), r.C.Param("tournament"), in)
 	}))
+	group.POST("/:tournament/import", tournamentBody(a, permTournamentsManage, func(r *Request, in tournaments.ImportTournamentInput) (any, error) {
+		return r.Service().ImportSnapshot(r.Context(), r.C.Param("tournament"), in)
+	}))
 	group.DELETE("/:tournament", a.route(true, true, func(r *Request) (any, error) {
 		if err := r.authorizeTournament(permTournamentsManage, r.C.Param("tournament")); err != nil {
 			return nil, err
