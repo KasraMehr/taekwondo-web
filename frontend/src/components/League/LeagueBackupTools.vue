@@ -1,11 +1,11 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
 import * as XLSX from 'xlsx'
 import { webApi, loadWebLeagues } from '../../webApi'
 import { useLeagueStore } from '../../stores/league'
 
 const store = useLeagueStore()
-const selectedId = ref('')
+const selectedId = computed(() => store.currentLeagueId)
 const mode = ref<'add' | 'replace'>('add')
 const fileInput = ref<HTMLInputElement | null>(null)
 const busy = ref(false), error = ref(''), notice = ref('')
@@ -85,7 +85,6 @@ async function importLeague(event: Event) {
     const created = await webApi().call<any>('/leagues/import', 'POST', { mode: mode.value, backup })
     store.replaceFromBackend(await loadWebLeagues())
     store.selectLeague(created.id)
-    selectedId.value = created.id
     notice.value = 'لیگ و مسابقاتش در سرور ذخیره شدند.'
   } catch (e: any) { error.value = e?.message || 'ایمپورت لیگ ناموفق بود' }
   finally { busy.value = false; input.value = '' }
@@ -93,14 +92,15 @@ async function importLeague(event: Event) {
 </script>
 
 <template>
-  <div class="mb-5 rounded-2xl border border-amber-200 bg-white p-4 shadow-sm">
-    <div class="mb-3"><h3 class="font-black text-slate-900">پشتیبان لیگ</h3><p class="mt-1 text-xs text-slate-500">خروجی از سرور خوانده می‌شود و ایمپورت پس از ذخیرهٔ کامل در سرور تأیید می‌شود.</p></div>
-    <div class="flex flex-wrap items-end gap-2">
-      <label class="min-w-48 flex-1 text-xs font-bold text-slate-600">انتخاب لیگ برای خروجی<select v-model="selectedId" class="mt-1 block w-full rounded-lg border p-2 text-sm"><option value="">انتخاب کنید</option><option v-for="league in store.leagues" :key="league.id" :value="league.id">{{ league.name }}</option></select></label>
+  <div class="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+    <div class="mb-6"><div class="text-xs font-bold text-amber-700">مدیریت داده‌های فصل</div><h3 class="mt-1 text-xl font-black text-slate-900">ورودی و خروجی لیگ</h3><p class="mt-2 text-sm text-slate-500">از لیگ «{{ store.currentLeague?.name }}» همراه با ورزشکاران و مسابقات هفته‌ها نسخهٔ اکسل بگیرید یا فایل پشتیبان را بازیابی کنید.</p></div>
+    <div class="grid gap-4 md:grid-cols-2">
+      <div class="rounded-xl border border-slate-200 bg-slate-50 p-4"><h4 class="font-bold">خروجی فصل</h4><p class="my-2 text-xs leading-6 text-slate-500">فایل اکسل شامل اطلاعات کامل و برگه‌های خواندنی ورزشکاران و هفته‌هاست.</p>
       <button :disabled="busy || !selectedId" class="rounded-lg bg-slate-900 px-4 py-2 text-sm font-bold text-white disabled:opacity-40" @click="exportLeague">خروجی اکسل لیگ</button>
-      <label class="text-xs font-bold text-slate-600">روش ایمپورت<select v-model="mode" class="mt-1 block rounded-lg border p-2 text-sm"><option value="add">افزودن به‌عنوان لیگ جدید</option><option value="replace">جایگزینی لیگ با شناسهٔ فایل</option></select></label>
+      </div><div class="rounded-xl border border-slate-200 bg-slate-50 p-4"><h4 class="font-bold">بازیابی فصل</h4><p class="my-2 text-xs leading-6 text-slate-500">فایل پشتیبان لیگ را در سرور ذخیره کنید.</p><label class="mb-3 block text-xs font-bold text-slate-600">روش ایمپورت<select v-model="mode" class="mt-1 block w-full rounded-lg border bg-white p-2 text-sm"><option value="add">افزودن به‌عنوان لیگ جدید</option><option value="replace">جایگزینی لیگ با شناسهٔ فایل</option></select></label>
       <button :disabled="busy" class="rounded-lg border border-amber-400 px-4 py-2 text-sm font-bold text-amber-900 disabled:opacity-40" @click="fileInput?.click()">ایمپورت اکسل / JSON</button>
       <input ref="fileInput" type="file" accept=".xlsx,.xls,.json" class="hidden" @change="importLeague">
+      </div>
     </div>
     <p v-if="error" class="mt-3 rounded-lg bg-rose-50 p-2 text-sm text-rose-700" role="alert">{{ error }}</p>
     <p v-if="notice" class="mt-3 rounded-lg bg-emerald-50 p-2 text-sm text-emerald-700" role="status">{{ notice }}</p>

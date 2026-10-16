@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, watch, onUnmounted } from "vue";
+import { ref, computed, watch, onMounted, onUnmounted } from "vue";
 import { useTournamentStore } from "../stores/tournament";
 import { useTeamTournamentStore } from "../stores/teamTournament";
 import { useLeagueStore } from "../stores/league";
@@ -9,8 +9,6 @@ import type { Gender, AgeCategory } from "../data/categories";
 import type { TournamentFormat, TeamTournamentStatus } from "../types";
 import { loadWebLeagues, webApi } from "../webApi";
 import PoomsaeList from './Poomsae/PoomsaeList.vue';
-import LeagueBackupTools from './League/LeagueBackupTools.vue';
-import PoomsaeLeagues from './Poomsae/PoomsaeLeagues.vue';
 import {
   isValidJalaaliDate,
   toGregorian,
@@ -385,6 +383,16 @@ function remove(row: Row) {
 
 // ─── لیگ‌ها ───
 const showLeagueForm = ref(false);
+const leagueDiscipline = ref<'kyorugi' | 'poomsae'>('kyorugi');
+type PoomsaeLeagueSummary = { id: string; name: string; seasonName: string; weeks: { id: string; eventId: string | null; stage: number }[] };
+const poomsaeLeagues = ref<PoomsaeLeagueSummary[]>([]);
+const leagueFilter = ref<'all' | 'kyorugi' | 'poomsae'>('all');
+const poomsaeLeagueError = ref('');
+async function loadPoomsaeLeagues() {
+  try { poomsaeLeagues.value = await webApi().call<PoomsaeLeagueSummary[]>('/poomsae-leagues'); poomsaeLeagueError.value = '' }
+  catch (e: any) { poomsaeLeagueError.value = e?.message || 'دریافت لیگ‌های پومسه ناموفق بود' }
+}
+onMounted(loadPoomsaeLeagues);
 watch([showForm, showLeagueForm], ([tournamentOpen, leagueOpen]) => {
   document.body.style.overflow = tournamentOpen || leagueOpen ? "hidden" : "";
 });
@@ -411,6 +419,7 @@ function resetLeagueForm() {
   stageCount.value = 2;
   weeksPerStage.value = 3;
   leagueFormat.value = "grandPrix";
+  leagueDiscipline.value = 'kyorugi';
   leagueGender.value = "male";
   leagueAgeCategory.value = "نونهالان";
   leagueSlotCount.value = leagueSuggestedSlotCount.value;
@@ -422,10 +431,19 @@ function resetLeagueForm() {
 async function submitLeague() {
   if (!leagueName.value.trim()) { leagueError.value = "نام لیگ را وارد کنید"; return; }
   if (!seasonName.value.trim()) { leagueError.value = "نام فصل را وارد کنید"; return; }
-  if (stageCount.value < 1 || stageCount.value > 6) { leagueError.value = "تعداد مراحل باید بین ۱ تا ۶ باشد"; return; }
-  if (weeksPerStage.value < 1 || weeksPerStage.value > 12) { leagueError.value = "تعداد هفته در هر مرحله باید بین ۱ تا ۱۲ باشد"; return; }
+  if (stageCount.value < 1 || stageCount.value > (leagueDiscipline.value === 'poomsae' ? 10 : 6)) { leagueError.value = "تعداد مراحل معتبر نیست"; return; }
+  if (weeksPerStage.value < 1 || weeksPerStage.value > (leagueDiscipline.value === 'poomsae' ? 52 : 12)) { leagueError.value = "تعداد هفته معتبر نیست"; return; }
 
   try {
+    if (leagueDiscipline.value === 'poomsae') {
+      const created = await webApi().call<{ id: string }>('/poomsae-leagues', 'POST', {
+        name: leagueName.value.trim(), seasonName: seasonName.value.trim(), stageCount: stageCount.value, weeksPerStage: weeksPerStage.value,
+      });
+      await loadPoomsaeLeagues();
+      resetLeagueForm();
+      ui.goPoomsaeLeague(created.id);
+      return;
+    }
     const created = await webApi().call<any>('/leagues', 'POST', {
       name: leagueName.value.trim(), seasonName: seasonName.value.trim(),
       gender: leagueGender.value, ageCategory: leagueAgeCategory.value,
@@ -459,7 +477,8 @@ function removeLeague(id: string, lName: string) {
 
 const totalTournaments = computed(() => rows.value.length);
 const totalTeamTournaments = computed(() => teamStore.items.length);
-const totalLeagues = computed(() => leagueStore.leagues.length);
+const totalLeagues = computed(() => leagueStore.leagues.length + poomsaeLeagues.value.length);
+const visibleLeagueCount = computed(() => leagueFilter.value === 'kyorugi' ? leagueStore.leagues.length : leagueFilter.value === 'poomsae' ? poomsaeLeagues.value.length : totalLeagues.value);
 </script>
 
 <template>
@@ -758,11 +777,10 @@ const totalLeagues = computed(() => leagueStore.leagues.length);
 
     <!-- ═══════════════ تب لیگ‌ها ═══════════════ -->
     <div v-else-if="activeTab === 'leagues'">
-      <LeagueBackupTools />
-      <div class="mb-6 flex items-center justify-between rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
-        <div class="px-2"><div class="text-sm font-bold text-slate-800">لیگ‌های ثبت‌شده</div><div class="mt-0.5 text-xs text-slate-400">فصل‌ها، تیم‌ها و هفته‌های مسابقات</div></div>
+      <div class="mb-6 flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+        <div><div class="text-xl font-black text-slate-900">لیگ‌های تکواندو</div><div class="mt-1 text-sm text-slate-500">فصل‌های کیورگی و پومسه را از پنل اختصاصی هر لیگ مدیریت کنید.</div></div>
         <button
-            @click="showLeagueForm = !showLeagueForm"
+            @click="showLeagueForm = true"
             class="rounded-xl bg-slate-900 px-5 py-2.5 text-sm font-bold text-white shadow transition hover:bg-blue-700"
         >
           + لیگ جدید
@@ -778,8 +796,10 @@ const totalLeagues = computed(() => leagueStore.leagues.length);
         <div class="p-5 sm:p-7">
 
         <div class="mb-6 rounded-2xl border border-slate-200 bg-white p-4">
-          <label class="mb-3 block text-sm font-bold text-slate-700">نوع لیگ</label>
-          <div class="grid gap-3 sm:grid-cols-2">
+          <label class="mb-3 block text-sm font-bold text-slate-700">رشتهٔ لیگ</label>
+          <div class="mb-5 grid gap-3 sm:grid-cols-2"><button type="button" class="rounded-xl border-2 px-4 py-3 text-right font-bold" :class="leagueDiscipline==='kyorugi'?'border-amber-500 bg-amber-50 text-amber-900':'border-slate-200 text-slate-600'" @click="leagueDiscipline='kyorugi'">کیورگی<span class="mt-1 block text-xs font-normal">لیگ مبارزه و مسابقات وزن‌ها</span></button><button type="button" class="rounded-xl border-2 px-4 py-3 text-right font-bold" :class="leagueDiscipline==='poomsae'?'border-teal-600 bg-teal-50 text-teal-900':'border-slate-200 text-slate-600'" @click="leagueDiscipline='poomsae'">پومسه<span class="mt-1 block text-xs font-normal">لیگ فرم و جدول امتیاز فصل</span></button></div>
+          <label v-if="leagueDiscipline==='kyorugi'" class="mb-3 block text-sm font-bold text-slate-700">نوع لیگ کیورگی</label>
+          <div v-if="leagueDiscipline==='kyorugi'" class="grid gap-3 sm:grid-cols-2">
             <button
                 v-for="(label, key) in FORMAT_LABELS"
                 :key="key"
@@ -815,7 +835,7 @@ const totalLeagues = computed(() => leagueStore.leagues.length);
                 class="w-full rounded-lg border border-slate-300 px-3 py-2 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200"
             />
           </div>
-          <div>
+          <div v-if="leagueDiscipline==='kyorugi'">
             <label class="mb-1 block text-sm font-medium text-slate-600">جنسیت</label>
             <select
                 v-model="leagueGender"
@@ -826,7 +846,7 @@ const totalLeagues = computed(() => leagueStore.leagues.length);
               </option>
             </select>
           </div>
-          <div>
+          <div v-if="leagueDiscipline==='kyorugi'">
             <label class="mb-1 block text-sm font-medium text-slate-600">رده سنی</label>
             <select
                 v-model="leagueAgeCategory"
@@ -841,7 +861,7 @@ const totalLeagues = computed(() => leagueStore.leagues.length);
                 v-model.number="stageCount"
                 type="number"
                 min="1"
-                max="6"
+                :max="leagueDiscipline==='poomsae'?10:6"
                 class="w-full rounded-lg border border-slate-300 px-3 py-2 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200"
             />
           </div>
@@ -851,11 +871,11 @@ const totalLeagues = computed(() => leagueStore.leagues.length);
                 v-model.number="weeksPerStage"
                 type="number"
                 min="1"
-                max="12"
+                :max="leagueDiscipline==='poomsae'?52:12"
                 class="w-full rounded-lg border border-slate-300 px-3 py-2 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200"
             />
           </div>
-          <div v-if="leagueFormat === 'team'">
+          <div v-if="leagueDiscipline==='kyorugi' && leagueFormat === 'team'">
             <label class="mb-1 block text-sm font-medium text-slate-600">
               تعداد اوزان هر مواجهه
             </label>
@@ -867,7 +887,7 @@ const totalLeagues = computed(() => leagueStore.leagues.length);
         </div>
 
         <label
-            v-if="leagueFormat === 'team'"
+            v-if="leagueDiscipline==='kyorugi' && leagueFormat === 'team'"
             class="mt-4 flex cursor-pointer items-center gap-2 text-sm text-slate-700"
         >
           <input
@@ -897,21 +917,24 @@ const totalLeagues = computed(() => leagueStore.leagues.length);
        </div>
       </div>
 
+      <div class="mb-5 flex flex-wrap items-center gap-2"><button v-for="option in [{key:'all',label:'همهٔ لیگ‌ها',count:totalLeagues},{key:'kyorugi',label:'کیورگی',count:leagueStore.leagues.length},{key:'poomsae',label:'پومسه',count:poomsaeLeagues.length}] as const" :key="option.key" class="rounded-xl border px-4 py-2 text-sm font-bold transition" :class="leagueFilter===option.key?'border-slate-900 bg-slate-900 text-white':'border-slate-200 bg-white text-slate-600 hover:border-slate-400'" @click="leagueFilter=option.key">{{ option.label }} <span class="mr-1 opacity-70">{{ toPersianDigits(option.count) }}</span></button></div>
+      <p v-if="poomsaeLeagueError" class="mb-4 rounded-xl bg-rose-50 p-3 text-sm text-rose-700">{{ poomsaeLeagueError }} <button class="font-bold underline" @click="loadPoomsaeLeagues">تلاش دوباره</button></p>
       <div
-          v-if="leagueStore.leagues.length === 0"
+          v-if="visibleLeagueCount === 0 && !poomsaeLeagueError"
           class="rounded-2xl border-2 border-dashed border-slate-300 bg-white py-20 text-center"
       >
         <div class="mb-3 text-5xl">🏆</div>
-        <p class="text-lg text-slate-500">هنوز لیگی ایجاد نشده است</p>
+        <p class="text-lg text-slate-500">{{ totalLeagues ? 'در این بخش لیگی پیدا نشد' : 'هنوز لیگی ایجاد نشده است' }}</p>
       </div>
 
       <div v-else class="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
         <div
-            v-for="l in leagueStore.leagues"
+            v-for="l in leagueFilter==='poomsae'?[]:leagueStore.leagues"
             :key="l.id"
             class="group relative overflow-hidden rounded-3xl border border-slate-200 bg-white p-5 shadow-sm transition duration-300 hover:-translate-y-1 hover:border-amber-300 hover:shadow-xl"
         >
           <div class="absolute inset-x-0 top-0 h-1 bg-gradient-to-l from-amber-500 to-orange-300"></div>
+          <span class="mb-4 inline-flex rounded-full bg-amber-100 px-2.5 py-1 text-xs font-bold text-amber-800">کیورگی</span>
           <span
               :class="[
               'mb-4 inline-flex rounded-full px-2.5 py-1 text-xs font-medium',
@@ -947,8 +970,14 @@ const totalLeagues = computed(() => leagueStore.leagues.length);
             مدیریت لیگ
           </button>
         </div>
+        <article v-for="l in leagueFilter==='kyorugi'?[]:poomsaeLeagues" :key="l.id" class="group relative overflow-hidden rounded-3xl border border-slate-200 bg-white p-5 shadow-sm transition duration-300 hover:-translate-y-1 hover:border-teal-300 hover:shadow-xl">
+          <div class="absolute inset-x-0 top-0 h-1 bg-gradient-to-l from-teal-700 to-cyan-400"></div>
+          <span class="mb-4 inline-flex rounded-full bg-teal-100 px-2.5 py-1 text-xs font-bold text-teal-800">پومسه</span>
+          <h3 class="mb-4 border-b border-slate-100 pb-4 text-lg font-black leading-7 text-slate-900">{{ l.name }}</h3>
+          <div class="grid grid-cols-2 gap-2 text-sm"><div class="col-span-2 rounded-xl bg-teal-50 p-3"><div class="text-[10px] text-teal-700">فصل جاری</div><div class="mt-1 font-bold text-teal-950">{{ l.seasonName }}</div></div><div class="rounded-xl bg-slate-50 p-3"><div class="text-[10px] text-slate-400">ساختار</div><div class="mt-1 font-bold text-slate-700">{{ new Set(l.weeks.map(w=>w.stage)).size }} مرحله</div></div><div class="rounded-xl bg-slate-50 p-3"><div class="text-[10px] text-slate-400">مسابقات هفته‌ها</div><div class="mt-1 font-bold text-slate-700">{{ l.weeks.filter(w=>w.eventId).length }} از {{ l.weeks.length }}</div></div></div>
+          <button class="mt-4 w-full rounded-xl bg-slate-900 py-2.5 text-sm font-bold text-white transition hover:bg-teal-700" @click="ui.goPoomsaeLeague(l.id)">مدیریت لیگ</button>
+        </article>
       </div>
-      <PoomsaeLeagues class="mt-6" />
     </div>
     <PoomsaeList v-else />
   </div>

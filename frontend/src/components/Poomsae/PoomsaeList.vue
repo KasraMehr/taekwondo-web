@@ -5,7 +5,6 @@ import { useUiStore } from '../../stores/ui'
 import type { PoomsaeEvent } from '../../types/poomsae'
 import { fa, jalaliFromIso, message } from '../../utils/poomsae'
 import PoomsaeEventForm from './PoomsaeEventForm.vue'
-import PoomsaeLeagues from './PoomsaeLeagues.vue'
 import './poomsae.css'
 const store = usePoomsaeStore(), ui = useUiStore()
 const events = ref<PoomsaeEvent[]>([]), search = ref(''), error = ref(''), loading = ref(true), creating = ref(false)
@@ -17,7 +16,6 @@ onMounted(load)
 </script>
 <template>
   <section class="ps space-y-5">
-    <PoomsaeLeagues :events="events" />
     <div class="ps-toolbar"><div><h3 class="ps-title">مسابقات پومسه</h3><p class="ps-muted mt-1">از ثبت‌نام تا آخرین نمره؛ همهٔ مراحل در یک فضای مشترک</p></div><button v-if="store.options?.permissions.createEvent" class="ps-btn" @click="creating = true">＋ مسابقه پومسه جدید</button></div>
     <div v-if="error" class="ps-error" role="alert">{{ error }} <button class="ps-link" @click="load">تلاش دوباره</button></div>
     <div v-if="loading" class="ps-card ps-muted" role="status">در حال دریافت مسابقات پومسه…</div>

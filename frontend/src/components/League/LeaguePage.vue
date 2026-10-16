@@ -9,6 +9,7 @@ import LeagueRoster from './LeagueRoster.vue'
 import LeagueWeeks from './LeagueWeeks.vue'
 import LeagueOverview from './LeagueOverview.vue'
 import LeagueSettings from './LeagueSettings.vue'
+import LeagueBackupTools from './LeagueBackupTools.vue'
 
 const ui=useUiStore();const store=useLeagueStore();const league=computed(()=>store.currentLeague);const refreshing=ref(false);const error=ref('')
 const tabs:Array<{key:LeagueTab;step?:number;label:string;hint:string}>=[
@@ -17,6 +18,7 @@ const tabs:Array<{key:LeagueTab;step?:number;label:string;hint:string}>=[
   {key:'weeks',step:3,label:'برگزاری هفته‌ها',hint:'ساخت تورنمنت'},
   {key:'overview',step:4,label:'گزارش و رده‌بندی',hint:'نتایج و PDF'},
   {key:'settings',label:'تنظیمات',hint:'قوانین امتیاز'},
+  {key:'backup',label:'ورودی و خروجی',hint:'پشتیبان فصل'},
 ]
 async function refresh(){refreshing.value=true;error.value='';try{store.replaceFromBackend(await loadWebLeagues())}catch(e:any){error.value=e?.message||'به‌روزرسانی ناموفق بود'}finally{refreshing.value=false}}
 </script>
@@ -28,12 +30,13 @@ async function refresh(){refreshing.value=true;error.value='';try{store.replaceF
       <div class="grid grid-cols-3 border-t border-white/10 bg-white/5"><div class="p-3 text-center"><b class="text-xl">{{league.clubs.filter(c=>c.active!==false).length}}</b><div class="text-xs text-slate-400">تیم</div></div><div class="border-x border-white/10 p-3 text-center"><b class="text-xl">{{league.athletes.filter(a=>a.isActive).length}}</b><div class="text-xs text-slate-400">ورزشکار</div></div><div class="p-3 text-center"><b class="text-xl">{{league.season.groups.length}}</b><div class="text-xs text-slate-400">گروه</div></div></div>
     </header>
     <p v-if="error" class="rounded-xl bg-rose-50 px-4 py-3 text-sm text-rose-700">{{error}}</p>
-    <nav class="grid gap-2 rounded-2xl border border-slate-200 bg-white p-2 shadow-sm sm:grid-cols-2 lg:grid-cols-5"><button v-for="tab in tabs" :key="tab.key" class="flex items-center gap-3 rounded-xl px-3 py-3 text-right transition" :class="ui.leagueTab===tab.key?'bg-emerald-600 text-white shadow-sm':'text-slate-600 hover:bg-slate-50'" @click="ui.leagueTab=tab.key"><span v-if="tab.step" class="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-sm font-bold" :class="ui.leagueTab===tab.key?'bg-white/20':'bg-slate-100'">{{tab.step}}</span><span><b class="block text-sm">{{tab.label}}</b><small :class="ui.leagueTab===tab.key?'text-emerald-100':'text-slate-400'">{{tab.hint}}</small></span></button></nav>
+    <nav class="grid gap-2 rounded-2xl border border-slate-200 bg-white p-2 shadow-sm sm:grid-cols-2 lg:grid-cols-3"><button v-for="tab in tabs" :key="tab.key" class="flex items-center gap-3 rounded-xl px-3 py-3 text-right transition" :class="ui.leagueTab===tab.key?'bg-emerald-600 text-white shadow-sm':'text-slate-600 hover:bg-slate-50'" @click="ui.leagueTab=tab.key"><span v-if="tab.step" class="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-sm font-bold" :class="ui.leagueTab===tab.key?'bg-white/20':'bg-slate-100'">{{tab.step}}</span><span><b class="block text-sm">{{tab.label}}</b><small :class="ui.leagueTab===tab.key?'text-emerald-100':'text-slate-400'">{{tab.hint}}</small></span></button></nav>
     <LeagueSetup v-if="ui.leagueTab==='setup'" />
     <LeagueRoster v-else-if="ui.leagueTab==='roster'" />
     <LeagueWeeks v-else-if="ui.leagueTab==='weeks'" />
     <LeagueOverview v-else-if="ui.leagueTab==='overview'" />
     <LeagueSettings v-else-if="ui.leagueTab==='settings'" />
+    <LeagueBackupTools v-else-if="ui.leagueTab==='backup'" />
   </div>
   <div v-else class="rounded-2xl border border-dashed border-slate-300 bg-white p-12 text-center text-slate-500">لیگ پیدا نشد.</div>
 </template>

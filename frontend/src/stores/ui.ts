@@ -1,7 +1,7 @@
 import { defineStore } from "pinia";
 import { ref } from "vue";
 
-export type Page = "home" | "tournament" | "league" | "teamTournament" | "poomsae";
+export type Page = "home" | "tournament" | "league" | "poomsaeLeague" | "teamTournament" | "poomsae";
 export type PoomsaeTab = 'athletes' | 'draw' | 'scores' | 'standings' | 'print' | 'settings'
 
 export type TournamentTab =
@@ -12,7 +12,8 @@ export type TournamentTab =
     | "standings"
     | "export"
     | "settings";
-export type LeagueTab = "setup" | "roster" | "overview" | "weeks" | "settings"
+export type LeagueTab = "setup" | "roster" | "overview" | "weeks" | "settings" | "backup"
+export type PoomsaeLeagueTab = 'overview' | 'weeks' | 'standings' | 'backup'
 
 export type TeamTournamentTab =
     | "teams"
@@ -30,12 +31,15 @@ export const useUiStore = defineStore("ui", () => {
     const poomsaeTab = ref<PoomsaeTab>('athletes');
     const tab = ref<TournamentTab>("athletes");
     const leagueTab = ref<LeagueTab>("setup");
+    const poomsaeLeagueId = ref('');
+    const poomsaeLeagueTab = ref<PoomsaeLeagueTab>('overview');
     const teamTab = ref<TeamTournamentTab>("teams");
 
     function goHome() {
         page.value = "home";
         tab.value = "athletes";
         leagueTab.value = "setup";
+        poomsaeLeagueTab.value = 'overview';
         teamTab.value = "teams";
     }
 
@@ -53,15 +57,23 @@ export const useUiStore = defineStore("ui", () => {
         teamTab.value = "teams";
     }
 
+    function goPoomsaeLeague(id: string) {
+        poomsaeLeagueId.value = id;
+        poomsaeLeagueTab.value = 'overview';
+        page.value = 'poomsaeLeague';
+    }
+
     return {
         page,
         homeSection, poomsaeEventId, poomsaeDivisionId, poomsaeTab,
         tab,
         leagueTab,
+        poomsaeLeagueId, poomsaeLeagueTab,
         teamTab,
         goHome,
         goTournament,
         goLeagueDetail,
         goTeamTournament,
+        goPoomsaeLeague,
     };
 });

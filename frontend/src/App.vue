@@ -10,6 +10,7 @@ import { useLeagueStore } from './stores/league'
 import HomePage from './components/HomePage.vue'
 import TournamentPage from './components/TournamentPage.vue'
 import LeaguePage from './components/League/LeaguePage.vue'
+import PoomsaeLeaguePage from './components/Poomsae/PoomsaeLeaguePage.vue'
 import TeamTournamentPage from './components/TeamTournoment/TeamTournamentPage.vue'
 import { loadWebLeagues, loadWebTournaments, loginWeb, savedSession, saveSession } from './webApi'
 import PublicOVR from './components/PublicOVR.vue'
@@ -28,12 +29,13 @@ const isPublicOVR = /^\/ovr(?:\/[1-9]\d*)?\/?$/i.test(location.pathname)
 const isWeighInOVR = /^\/ovr\/weigh-in(?:\/[1-9]\d*)?\/?$/i.test(location.pathname)
 function applyUrl(){
   const parts=location.pathname.split('/').filter(Boolean)
+  if(parts[0]==='poomsae-leagues'&&parts[1]){ui.poomsaeLeagueId=parts[1];ui.poomsaeLeagueTab=(['overview','weeks','standings','backup'].includes(parts[2])?parts[2]:'overview') as any;ui.page='poomsaeLeague';return}
   if(parts[0]==='poomsae') { ui.homeSection='poomsae'; if(parts[1]) { ui.poomsaeEventId=parts[1]; ui.poomsaeDivisionId=new URLSearchParams(location.search).get('division')||''; ui.poomsaeTab=(['athletes','draw','scores','standings','print','settings'].includes(parts[2])?parts[2]:'athletes') as PoomsaeTab; ui.page='poomsae' } else ui.goHome(); return }
   if(parts[0]==='tournaments'&&parts[1]&&tournamentStore.tournaments.some(t=>t.id===parts[1])){tournamentStore.selectTournament(parts[1]);ui.page='tournament';ui.tab=(parts[2]||'athletes') as any;return}
   if(parts[0]==='leagues'&&parts[1]&&leagueStore.leagues.some(l=>l.id===parts[1])){leagueStore.selectLeague(parts[1]);ui.page='league';ui.leagueTab=(parts[2]||'setup') as any;return}
   ui.goHome()
 }
-function currentUrl(){if(ui.page==='poomsae'&&ui.poomsaeEventId)return `/poomsae/${ui.poomsaeEventId}/${ui.poomsaeTab}${ui.poomsaeDivisionId?'?division='+encodeURIComponent(ui.poomsaeDivisionId):''}`;if(ui.page==='tournament'&&tournamentStore.currentTournamentId)return`/tournaments/${tournamentStore.currentTournamentId}${ui.tab==='athletes'?'':`/${ui.tab}`}`;if(ui.page==='league'&&leagueStore.currentLeagueId)return`/leagues/${leagueStore.currentLeagueId}${ui.leagueTab==='setup'?'':`/${ui.leagueTab}`}`;return ui.homeSection==='poomsae'?'/poomsae':'/'}
+function currentUrl(){if(ui.page==='poomsaeLeague'&&ui.poomsaeLeagueId)return `/poomsae-leagues/${ui.poomsaeLeagueId}${ui.poomsaeLeagueTab==='overview'?'':`/${ui.poomsaeLeagueTab}`}`;if(ui.page==='poomsae'&&ui.poomsaeEventId)return `/poomsae/${ui.poomsaeEventId}/${ui.poomsaeTab}${ui.poomsaeDivisionId?'?division='+encodeURIComponent(ui.poomsaeDivisionId):''}`;if(ui.page==='tournament'&&tournamentStore.currentTournamentId)return`/tournaments/${tournamentStore.currentTournamentId}${ui.tab==='athletes'?'':`/${ui.tab}`}`;if(ui.page==='league'&&leagueStore.currentLeagueId)return`/leagues/${leagueStore.currentLeagueId}${ui.leagueTab==='setup'?'':`/${ui.leagueTab}`}`;return ui.homeSection==='poomsae'?'/poomsae':'/'}
 async function hydrate(){
   loading.value=true;ready.value=false;error.value=''
   try {
@@ -53,7 +55,7 @@ onMounted(()=>window.addEventListener('popstate',applyUrl))
 function beforeLeave(e:BeforeUnloadEvent){if(poomsaeStore.dirtyCount){e.preventDefault();e.returnValue=''}}
 onMounted(()=>window.addEventListener('beforeunload',beforeLeave))
 onUnmounted(()=>{window.removeEventListener('popstate',applyUrl);window.removeEventListener('beforeunload',beforeLeave)})
-watch([()=>ui.page,()=>ui.tab,()=>ui.leagueTab,()=>ui.homeSection,()=>ui.poomsaeEventId,()=>ui.poomsaeDivisionId,()=>ui.poomsaeTab,()=>tournamentStore.currentTournamentId,()=>leagueStore.currentLeagueId],()=>{if(!ready.value)return;const url=currentUrl();if(location.pathname+location.search!==url)history.pushState({},'',url)})
+watch([()=>ui.page,()=>ui.tab,()=>ui.leagueTab,()=>ui.poomsaeLeagueId,()=>ui.poomsaeLeagueTab,()=>ui.homeSection,()=>ui.poomsaeEventId,()=>ui.poomsaeDivisionId,()=>ui.poomsaeTab,()=>tournamentStore.currentTournamentId,()=>leagueStore.currentLeagueId],()=>{if(!ready.value)return;const url=currentUrl();if(location.pathname+location.search!==url)history.pushState({},'',url)})
 </script>
 
 <template>
@@ -85,6 +87,7 @@ watch([()=>ui.page,()=>ui.tab,()=>ui.leagueTab,()=>ui.homeSection,()=>ui.poomsae
       <TournamentPage v-if="ui.page === 'tournament'" />
       <TeamTournamentPage v-else-if="ui.page === 'teamTournament'" />
       <LeaguePage v-else-if="ui.page === 'league'" />
+      <PoomsaeLeaguePage v-else-if="ready && ui.page === 'poomsaeLeague'" />
       <PoomsaePage v-else-if="ready && ui.page === 'poomsae'" />
     </main>
   </div>
