@@ -41,6 +41,7 @@ func (s *Service) Create(ctx context.Context, in CreateInput) (*League, error) {
 	if in.Settings != nil {
 		settings = *in.Settings
 	}
+	settings.SeasonName = in.SeasonName
 	if err := validateSettings(settings); err != nil {
 		return nil, err
 	}
@@ -90,6 +91,13 @@ func validateSettings(v Settings) error {
 }
 
 func (s *Service) UpdateSettings(ctx context.Context, id string, v Settings) (*League, error) {
+	if v.SeasonName == "" {
+		current, err := s.Get(ctx, id)
+		if err != nil {
+			return nil, err
+		}
+		v.SeasonName = current.Settings.SeasonName
+	}
 	if err := validateSettings(v); err != nil {
 		return nil, err
 	}
@@ -131,13 +139,13 @@ func (s *Service) Get(ctx context.Context, id string) (*League, error) {
 	}
 	rows.Close()
 	for i := range l.Stages {
-		rows, err = s.db.Query(ctx, `SELECT id::text,name,position,date_range,locked FROM league_weeks WHERE league_id=$1 AND stage_id=$2 ORDER BY position`, id, l.Stages[i].ID)
+		rows, err = s.db.Query(ctx, `SELECT w.id::text,w.name,w.position,w.date_range,w.locked,t.id::text FROM league_weeks w LEFT JOIN tournaments t ON t.league_id=w.league_id AND t.week_id=w.id AND t.organization_id=$2 AND t.group_id IS NULL WHERE w.league_id=$1 AND w.stage_id=$3 ORDER BY w.position`, id, s.organizationID, l.Stages[i].ID)
 		if err != nil {
 			return nil, err
 		}
 		for rows.Next() {
 			var x Week
-			if err = rows.Scan(&x.ID, &x.Name, &x.Position, &x.DateRange, &x.Locked); err != nil {
+			if err = rows.Scan(&x.ID, &x.Name, &x.Position, &x.DateRange, &x.Locked, &x.TournamentID); err != nil {
 				rows.Close()
 				return nil, err
 			}

@@ -17,6 +17,7 @@ func DefaultScoring() ScoringConfig {
 }
 
 type Settings struct {
+	SeasonName     string        `json:"seasonName,omitempty"`
 	Scoring        ScoringConfig `json:"scoring"`
 	TeamsToPromote int           `json:"teamsToPromote"`
 	AutoPromote    bool          `json:"autoPromote"`
@@ -47,11 +48,12 @@ type Stage struct {
 	PromotedTeamIDs []string `json:"promotedTeamIds"`
 }
 type Week struct {
-	ID        string  `json:"id"`
-	Name      string  `json:"name"`
-	Position  int     `json:"position"`
-	DateRange *string `json:"dateRange,omitempty"`
-	Locked    bool    `json:"locked"`
+	ID           string  `json:"id"`
+	Name         string  `json:"name"`
+	Position     int     `json:"position"`
+	DateRange    *string `json:"dateRange,omitempty"`
+	Locked       bool    `json:"locked"`
+	TournamentID *string `json:"tournamentId,omitempty"`
 }
 type Group struct {
 	ID       string `json:"id"`
