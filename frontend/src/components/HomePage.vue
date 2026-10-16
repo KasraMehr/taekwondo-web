@@ -9,6 +9,8 @@ import type { Gender, AgeCategory } from "../data/categories";
 import type { TournamentFormat, TeamTournamentStatus } from "../types";
 import { loadWebLeagues, webApi } from "../webApi";
 import PoomsaeList from './Poomsae/PoomsaeList.vue';
+import LeagueBackupTools from './League/LeagueBackupTools.vue';
+import PoomsaeLeagues from './Poomsae/PoomsaeLeagues.vue';
 import {
   isValidJalaaliDate,
   toGregorian,
@@ -756,6 +758,7 @@ const totalLeagues = computed(() => leagueStore.leagues.length);
 
     <!-- ═══════════════ تب لیگ‌ها ═══════════════ -->
     <div v-else-if="activeTab === 'leagues'">
+      <LeagueBackupTools />
       <div class="mb-6 flex items-center justify-between rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
         <div class="px-2"><div class="text-sm font-bold text-slate-800">لیگ‌های ثبت‌شده</div><div class="mt-0.5 text-xs text-slate-400">فصل‌ها، تیم‌ها و هفته‌های مسابقات</div></div>
         <button
@@ -945,6 +948,7 @@ const totalLeagues = computed(() => leagueStore.leagues.length);
           </button>
         </div>
       </div>
+      <PoomsaeLeagues class="mt-6" />
     </div>
     <PoomsaeList v-else />
   </div>
