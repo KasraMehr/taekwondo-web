@@ -1,9 +1,10 @@
 <template>
   <!-- دکمه اصلی چاپ -->
+  <div class="no-print fixed bottom-6 left-6 z-50 flex flex-wrap gap-2">
   <button
       type="button"
-      class="no-print fixed bottom-6 left-6 z-50 rounded-xl bg-slate-900 px-5 py-3 text-sm font-bold text-white shadow-xl transition hover:-translate-y-0.5 hover:bg-slate-800"
-      @click="print"
+      class="rounded-xl bg-slate-900 px-5 py-3 text-sm font-bold text-white shadow-xl transition hover:-translate-y-0.5 hover:bg-slate-800"
+      @click="print(true)"
       :disabled="!pages.length"
   >
     🖨️
@@ -13,6 +14,8 @@
           : `خروجی PDF ${getWeightLabel(selectedCategory)}`
     }}
   </button>
+  <button type="button" class="rounded-xl border border-slate-300 bg-white px-5 py-3 text-sm font-bold text-slate-800 shadow-xl transition hover:bg-slate-100" :disabled="!pages.length" @click="print(false)">🖨️ چاپ براکت بدون شمارهٔ بازی</button>
+  </div>
 
   <div
       id="bracket-print-root"
@@ -171,6 +174,7 @@
                       :match="match"
                       :athletes="athletes"
                       :show-meta="!match.isBye"
+                      :show-number="showMatchNumbers"
                       :placeholder1="page.slotLabels?.[match.id]?.athlete1"
                       :placeholder2="page.slotLabels?.[match.id]?.athlete2"
                   />
@@ -211,6 +215,7 @@
                       :athletes="athletes"
                       :is-final="true"
                       :show-meta="!page.data.final.isBye"
+                      :show-number="showMatchNumbers"
                       :placeholder1="page.slotLabels?.[page.data.final.id]?.athlete1"
                       :placeholder2="page.slotLabels?.[page.data.final.id]?.athlete2"
                   />
@@ -322,6 +327,7 @@
                       :match="match"
                       :athletes="athletes"
                       :show-meta="!match.isBye"
+                      :show-number="showMatchNumbers"
                       :placeholder1="page.slotLabels?.[match.id]?.athlete1"
                       :placeholder2="page.slotLabels?.[match.id]?.athlete2"
                   />
@@ -586,6 +592,7 @@ const officialCategories = computed<string[]>(() => {
 })
 
 const selectedCategory = ref<string>('all')
+const showMatchNumbers = ref(true)
 
 function isTrueBye(match: MatchLike): boolean {
   if (match.isBye === true) {
@@ -1022,6 +1029,10 @@ const MatchBox = defineComponent({
       type: Boolean,
       default: true,
     },
+    showNumber: {
+      type: Boolean,
+      default: true,
+    },
     placeholder1: {
       type: String as PropType<string | undefined>,
       default: undefined,
@@ -1227,7 +1238,7 @@ const MatchBox = defineComponent({
                 'div',
                 { class: 'match-meta' },
                 [
-                  props.showMeta && !byeMatch
+                  props.showMeta && props.showNumber && !byeMatch
                       ? h('div', { class: byeMatch ? 'match-tag is-bye-tag' : 'match-tag' }, matchTag(match))
                       : null
                 ]
@@ -1272,14 +1283,15 @@ function getWeightLabel(category: string): string {
 }
 
 
-async function print(): Promise<void> {
+async function print(numbered = true): Promise<void> {
+  showMatchNumbers.value = numbered
   await document.fonts.ready
   await nextTick()
 
   requestAnimationFrame(() => {
     requestAnimationFrame(() => {
       document.body.classList.add('bracket-print-mode')
-      window.addEventListener('afterprint', () => document.body.classList.remove('bracket-print-mode'), { once: true })
+      window.addEventListener('afterprint', () => { document.body.classList.remove('bracket-print-mode'); showMatchNumbers.value = true }, { once: true })
       window.print()
     })
   })

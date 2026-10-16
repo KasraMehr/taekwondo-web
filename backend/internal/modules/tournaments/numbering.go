@@ -78,6 +78,9 @@ func (s *tournamentService) NumberMatches(ctx context.Context, id string, previe
 	if err = applyCourtPlan(t); err != nil {
 		return nil, err
 	}
+	if err = scheduleRestAwareOrders(t); err != nil {
+		return nil, err
+	}
 	if err = assignMatchNumbers(t); err != nil {
 		return nil, err
 	}
@@ -90,6 +93,85 @@ func (s *tournamentService) NumberMatches(ctx context.Context, id string, previe
 	}
 	return t, nil
 }
+
+// Fill every court queue without empty slots. At each position prefer a ready
+// bout whose possible participants have had two intervening bouts since their
+// feeder. A short rest is unavoidable when no other ready bout exists.
+func scheduleRestAwareOrders(t *Tournament) error {
+	indices := make([]int, 0, len(t.Matches))
+	byID := make(map[string]int, len(t.Matches))
+	done := make(map[string]bool, len(t.Matches))
+	for i := range t.Matches {
+		m := &t.Matches[i]
+		byID[m.ID] = i
+		if lifecycleIsBye(m) {
+			done[m.ID] = true
+		} else {
+			indices = append(indices, i)
+		}
+	}
+	sort.SliceStable(indices, func(i, j int) bool {
+		a, b := t.Matches[indices[i]], t.Matches[indices[j]]
+		if a.Day != b.Day {
+			return a.Day < b.Day
+		}
+		if a.Order != b.Order {
+			return a.Order < b.Order
+		}
+		if a.Court != b.Court {
+			return a.Court < b.Court
+		}
+		return a.ID < b.ID
+	})
+	priority := make(map[string]int, len(indices))
+	for rank, i := range indices {
+		priority[t.Matches[i].ID] = rank
+	}
+	feeders := make(map[string][]string)
+	for _, m := range t.Matches {
+		if m.NextMatchID != nil {
+			feeders[*m.NextMatchID] = append(feeders[*m.NextMatchID], m.ID)
+		}
+	}
+	nextSlot := make(map[[2]int]int)
+	for len(done) < len(t.Matches) {
+		selected, selectedSlot, selectedShortfall := -1, 0, 0
+		for _, i := range indices {
+			m := t.Matches[i]
+			if done[m.ID] {
+				continue
+			}
+			slot := max(1, nextSlot[[2]int{m.Day, m.Court}])
+			shortfall := 0
+			ready := true
+			for _, feederID := range feeders[m.ID] {
+				if !done[feederID] {
+					ready = false
+					break
+				}
+				feeder := t.Matches[byID[feederID]]
+				if !lifecycleIsBye(&feeder) && feeder.Day == m.Day {
+					shortfall = max(shortfall, feeder.Order+3-slot)
+				}
+			}
+			if !ready {
+				continue
+			}
+			if selected < 0 || slot < selectedSlot || (slot == selectedSlot && (shortfall < selectedShortfall || shortfall == selectedShortfall && priority[m.ID] < priority[t.Matches[selected].ID])) {
+				selected, selectedSlot, selectedShortfall = i, slot, shortfall
+			}
+		}
+		if selected < 0 {
+			return fmt.Errorf("%w: bracket dependencies cannot be scheduled", ErrInvalidMatchPosition)
+		}
+		m := &t.Matches[selected]
+		m.Order = selectedSlot
+		nextSlot[[2]int{m.Day, m.Court}] = selectedSlot + 1
+		done[m.ID] = true
+	}
+	return nil
+}
+
 func assignMatchNumbers(t *Tournament) error {
 	if err := lifecycleValidateBracket(t); err != nil {
 		return err
