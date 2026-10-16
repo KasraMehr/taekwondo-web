@@ -110,6 +110,12 @@ const numberingCourts = computed(() => Array.from({ length: t.value?.courts ?? 0
       .sort((a: Match, b: Match) => (a.day ?? 1) - (b.day ?? 1) || a.order - b.order)
   return { court, matches: courtMatches }
 }))
+function hasShortRest(match: Match): boolean {
+  return (numberingPreview.value?.matches ?? []).some((feeder: Match) =>
+    !feeder.isBye && feeder.nextMatchId === match.id &&
+    (feeder.day ?? 1) === (match.day ?? 1) && match.order - feeder.order < 3
+  )
+}
 
 const ROUND_NAMES: Record<number, string> = {
   1: 'فینال',
@@ -542,7 +548,7 @@ function doTextSwap() {
     <template v-else-if="activeTab === 'schedule'">
 
       <div class="flex flex-wrap items-center gap-3 rounded-xl border border-indigo-100 bg-indigo-50 p-4">
-        <div class="min-w-0 flex-1"><div class="text-sm font-bold text-indigo-950">تخصیص زمین و شماره‌گذاری</div><div class="mt-1 text-xs text-indigo-700">بازی‌های هر وزن تا جای ممکن پشت سر هم روی یک زمین قرار می‌گیرند. برای شماره‌های A1 و B1، محدودهٔ شماره‌گذاری را در تنظیمات روی «هر زمین در هر روز» بگذارید.</div></div>
+        <div class="min-w-0 flex-1"><div class="text-sm font-bold text-indigo-950">تخصیص زمین و شماره‌گذاری</div><div class="mt-1 text-xs text-indigo-700">صف هر زمین بدون نوبت خالی می‌ماند؛ بازی‌های آمادهٔ دیگر تا جای ممکن بین دو بازی یک ورزشکار قرار می‌گیرند. برای شماره‌های A1 و B1، محدودهٔ شماره‌گذاری را در تنظیمات روی «هر زمین در هر روز» بگذارید.</div></div>
         <button :disabled="numberingBusy||!numberingReadiness?.ready" class="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-bold text-white disabled:opacity-50" @click="previewNumbering">{{numberingBusy?'در حال آماده‌سازی…':numberingReadiness?.ready?'پیش‌نمایش شماره‌گذاری':'پس از تکمیل قرعهٔ همهٔ وزن‌ها'}}</button>
         <p v-if="numberingError" class="w-full rounded-lg bg-rose-100 px-3 py-2 text-xs text-rose-800">{{numberingError}}</p>
       </div>
@@ -718,9 +724,9 @@ function doTextSwap() {
 
   <div v-if="numberingPreview" class="fixed inset-0 z-[70] grid place-items-center bg-slate-950/50 p-4" @click.self="numberingPreview=null">
     <section class="max-h-[90vh] w-full max-w-4xl overflow-auto rounded-2xl bg-white p-5 shadow-2xl" dir="rtl">
-      <div class="flex items-start justify-between gap-3"><div><h3 class="text-lg font-black text-slate-900">پیش‌نمایش صف و شمارهٔ زمین‌ها</h3><p class="mt-1 text-sm text-slate-500">هر بخش یک وزن است؛ بازی‌های هر زمین به ترتیب اجرا نمایش داده شده‌اند.</p></div><button class="rounded-lg px-3 py-1 text-slate-500 hover:bg-slate-100" @click="numberingPreview=null">بستن</button></div>
+      <div class="flex items-start justify-between gap-3"><div><h3 class="text-lg font-black text-slate-900">پیش‌نمایش صف و شمارهٔ زمین‌ها</h3><p class="mt-1 text-sm text-slate-500">صف هر زمین پیوسته است. اگر بازی جایگزین کافی نباشد، فاصلهٔ استراحت کوتاه مشخص می‌شود.</p></div><button class="rounded-lg px-3 py-1 text-slate-500 hover:bg-slate-100" @click="numberingPreview=null">بستن</button></div>
       <div class="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-        <article v-for="court in numberingCourts" :key="court.court" class="rounded-xl border border-slate-200 p-3"><h4 class="mb-2 font-bold">زمین {{courtLabel(court.court)}}</h4><ol class="space-y-1 text-xs"><li v-for="(match, index) in court.matches" :key="match.id" class="border-b border-slate-100 py-1"><div v-if="index === 0 || court.matches[index - 1].weightCategory !== match.weightCategory || court.matches[index - 1].day !== match.day" class="mb-1 rounded bg-indigo-50 px-2 py-1 font-bold text-indigo-800">روز {{match.day ?? 1}} · وزن {{match.weightCategory}}</div><div class="flex gap-2"><b class="shrink-0">{{courtLabel(court.court)}}{{match.matchNumber}}</b><span>{{athleteDisplayName(match.athlete1Id,match.id,1)}} / {{athleteDisplayName(match.athlete2Id,match.id,2)}}</span></div></li></ol><p v-if="!court.matches.length" class="text-xs text-slate-400">بازی ندارد</p></article>
+        <article v-for="court in numberingCourts" :key="court.court" class="rounded-xl border border-slate-200 p-3"><h4 class="mb-2 font-bold">زمین {{courtLabel(court.court)}}</h4><ol class="space-y-1 text-xs"><li v-for="(match, index) in court.matches" :key="match.id" class="border-b border-slate-100 py-1"><div v-if="hasShortRest(match)" class="mb-1 rounded bg-amber-50 px-2 py-1 font-bold text-amber-800">فاصلهٔ استراحت کم؛ بازی جایگزین کافی نیست</div><div v-if="index === 0 || court.matches[index - 1].weightCategory !== match.weightCategory || court.matches[index - 1].day !== match.day" class="mb-1 rounded bg-indigo-50 px-2 py-1 font-bold text-indigo-800">روز {{match.day ?? 1}} · وزن {{match.weightCategory}}</div><div class="flex gap-2"><b class="shrink-0">{{courtLabel(court.court)}}{{match.matchNumber}}</b><span>{{athleteDisplayName(match.athlete1Id,match.id,1)}} / {{athleteDisplayName(match.athlete2Id,match.id,2)}}</span></div></li></ol><p v-if="!court.matches.length" class="text-xs text-slate-400">بازی ندارد</p></article>
       </div>
       <p v-if="numberingError" class="mt-3 rounded-lg bg-rose-50 p-3 text-sm text-rose-700">{{numberingError}}</p>
       <div class="mt-5 flex justify-end gap-2"><button :disabled="numberingBusy" class="rounded-lg border px-4 py-2 text-sm" @click="numberingPreview=null">لغو</button><button :disabled="numberingBusy" class="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-bold text-white disabled:opacity-50" @click="applyNumbering">{{numberingBusy?'در حال ثبت…':'تأیید و ثبت شماره‌ها'}}</button></div>
