@@ -123,9 +123,9 @@ export const useLeagueStore = defineStore("league", () => {
                     return { id: a.id, profileId: a.profileId, teamId: a.teamId, coachName: a.coachName, ranking: a.ranking, name: a.name, nationalId: null, clubId: team?.clubId ?? null, club: a.clubName || null, isActive: a.active, weight: null, weightCategory: a.weightCategory, gender: raw.gender, birthDate: null, birthYear: null, beltDegree: null, memberCode: null, groupId: a.groupId, createdAt: a.createdAt, updatedAt: a.updatedAt }
                 }),
                 season: {
-                    id: raw.id, name: 'فصل جاری', groups,
+                    id: raw.id, name: raw.settings?.seasonName || 'فصل جاری', groups,
                     scoringConfig: { ...raw.settings?.scoring, keepPlayerRankingBetweenStages: false },
-                    stages: (raw.stages ?? []).map((s: any) => ({ id: s.id, name: s.name, order: s.position, completed: s.status === 'completed', promotedClubs: s.promotedTeamIds ?? [], playerPoints: {}, teamPoints: {}, weeks: (s.weeks ?? []).map((w: any) => ({ id: w.id, name: w.name, order: w.position, dateRange: w.dateRange, locked: w.locked })) })),
+                    stages: (raw.stages ?? []).map((s: any) => ({ id: s.id, name: s.name, order: s.position, completed: s.status === 'completed', promotedClubs: s.promotedTeamIds ?? [], playerPoints: {}, teamPoints: {}, weeks: (s.weeks ?? []).map((w: any) => ({ id: w.id, name: w.name, order: w.position, dateRange: w.dateRange, locked: w.locked, tournamentId: w.tournamentId ?? undefined })) })),
                     seasonPlayerPoints: {}, seasonTeamPoints: {}, completed: raw.status === 'completed',
                 },
             } as League

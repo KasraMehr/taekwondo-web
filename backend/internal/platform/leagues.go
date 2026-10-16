@@ -25,6 +25,9 @@ func (a *API) leagueRoutes(org *gin.RouterGroup) {
 	g.POST("", leagueBody(a, func(r *Request, in leagues.CreateInput) (any, error) {
 		return r.LeagueService().Create(r.Context(), in)
 	}))
+	g.POST("/import", leagueBody(a, func(r *Request, in leagues.ImportBackupInput) (any, error) {
+		return r.LeagueService().ImportBackup(r.Context(), in)
+	}))
 	g.GET("", a.route(true, true, func(r *Request) (any, error) {
 		if err := r.permit(permLeaguesRead); err != nil {
 			return nil, err
@@ -36,6 +39,12 @@ func (a *API) leagueRoutes(org *gin.RouterGroup) {
 			return nil, err
 		}
 		return r.LeagueService().Get(r.Context(), r.C.Param("league"))
+	}))
+	g.GET("/:league/export", a.route(true, true, func(r *Request) (any, error) {
+		if err := r.permit(permLeaguesRead); err != nil {
+			return nil, err
+		}
+		return r.LeagueService().ExportBackup(r.Context(), r.C.Param("league"))
 	}))
 	g.PUT("/:league/settings", leagueBody(a, func(r *Request, in leagues.Settings) (any, error) {
 		return r.LeagueService().UpdateSettings(r.Context(), r.C.Param("league"), in)

@@ -87,7 +87,11 @@ func tokenHash(token string) string {
 }
 func (a *API) route(auth, scoped bool, fn endpoint) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, 4<<20)
+		bodyLimit := int64(4 << 20)
+		if strings.HasSuffix(c.FullPath(), "/leagues/import") {
+			bodyLimit = 32 << 20
+		}
+		c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, bodyLimit)
 		for _, p := range c.Params {
 			if _, err := uuid.Parse(p.Value); err != nil {
 				writeError(c, bad("invalid "+p.Key))
@@ -321,4 +325,5 @@ func (a *API) Routes(router *gin.Engine) {
 	a.tournamentRoutes(org)
 	a.leagueRoutes(org)
 	a.poomsaeRoutes(org)
+	a.poomsaeLeagueRoutes(org)
 }
