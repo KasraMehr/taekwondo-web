@@ -53,6 +53,8 @@ type EventDay struct {
 	Label string `json:"label"`
 }
 type ScheduleSettings struct {
+	MatchMinutes     int        `json:"matchMinutes"`
+	RestMinutes      int        `json:"restMinutes"`
 	Mode             string     `json:"mode"`
 	SingleCourt      int        `json:"singleCourt"`
 	FinalCourtPolicy string     `json:"finalCourtPolicy"`
@@ -74,7 +76,7 @@ func DefaultSettings(date time.Time) TournamentSettings {
 		Scoring:   defaultScoring(),
 		WeighIn:   WeighInSettings{MaxAttempts: 2, ToleranceKg: 0.2},
 		Draw:      DrawSettings{Type: "random", SeparateTeams: true},
-		Schedule:  ScheduleSettings{Mode: "balanced", SingleCourt: 1, FinalCourtPolicy: "primary", FinalCourt: 1, DayAssignment: "manual", Days: []EventDay{{Day: 1, Date: date.Format("2006-01-02"), Label: "روز اول"}}, CategoryDays: map[string]int{}},
+		Schedule:  ScheduleSettings{MatchMinutes: 5, RestMinutes: 10, Mode: "balanced", SingleCourt: 1, FinalCourtPolicy: "primary", FinalCourt: 1, DayAssignment: "manual", Days: []EventDay{{Day: 1, Date: date.Format("2006-01-02"), Label: "روز اول"}}, CategoryDays: map[string]int{}},
 		Numbering: NumberingSettings{StartAt: 1, Scope: "court_day", Order: "category"},
 		Hogu:      HoguSettings{CourtSizes: map[int][]string{}, CategorySizes: map[string]string{}},
 	}
@@ -83,7 +85,13 @@ func settingsFor(t *Tournament) TournamentSettings {
 	if t.Settings == nil {
 		return DefaultSettings(t.Date)
 	}
-	return *t.Settings
+	s := *t.Settings
+	// Old events have neither timing field. Keep their JSON compatible.
+	if s.Schedule.MatchMinutes == 0 {
+		s.Schedule.MatchMinutes = 5
+		s.Schedule.RestMinutes = 10
+	}
+	return s
 }
 func dayForCategory(t *Tournament, category string) int {
 	day := settingsFor(t).Schedule.CategoryDays[category]
@@ -134,6 +142,9 @@ func applyDefaultHoguSizes(t *Tournament, hogu *HoguSettings) {
 
 func validateSettings(t *Tournament, s TournamentSettings) error {
 	invalid := func(message string) error { return fmt.Errorf("%w: %s", ErrInvalidTournamentInput, message) }
+	if s.Schedule.MatchMinutes < 0 || s.Schedule.MatchMinutes > 60 || s.Schedule.RestMinutes < 0 || s.Schedule.RestMinutes > 120 {
+		return invalid("invalid match/rest duration")
+	}
 	if s.Scoring.PointGap < 1 || s.Scoring.PointGap > 1000 || s.Scoring.PointGapFromRound < 1 || s.Scoring.PointGapFromRound > s.Scoring.MaxRounds || s.Scoring.GamJeomLimitPerRound < 1 || s.Scoring.GamJeomLimitPerRound > 100 || s.Scoring.RoundsToWin < 1 || s.Scoring.RoundsToWin > 5 || s.Scoring.MaxRounds != 2*s.Scoring.RoundsToWin-1 {
 		return invalid("invalid scoring rules")
 	}
@@ -284,20 +295,28 @@ func (s *tournamentService) UpdateSettings(ctx context.Context, id string, input
 	if len(t.Matches) > 0 && (old.Draw.Type != input.Draw.Type || old.Draw.SeparateTeams != input.Draw.SeparateTeams) {
 		return nil, fmt.Errorf("%w: reset brackets before changing draw settings", ErrBracketAlreadyDrawn)
 	}
-	if !reflect.DeepEqual(old.Schedule, input.Schedule) {
-		for i := range t.Matches {
-			t.Matches[i].MovedAt = nil
-		}
-	}
+
 	t.Settings = &input
-	if !reflect.DeepEqual(old, input) && !hasStartedMatches(t) {
+	scheduleChanged := !reflect.DeepEqual(old.Schedule, input.Schedule) || old.Numbering != input.Numbering || !reflect.DeepEqual(old.Hogu, input.Hogu)
+	if scheduleChanged && !hasStartedMatches(t) && !hasManualSchedule(t) {
 		clearMatchNumbers(t)
 	}
 	for i := range t.Matches {
 		t.Matches[i].Day = dayForCategory(t, t.Matches[i].WeightCategory)
 	}
-	if err = applyCourtPlan(t); err != nil {
-		return nil, err
+	if scheduleChanged && !hasStartedMatches(t) {
+		if hasManualSchedule(t) {
+			if err = buildScheduleTimeline(t, true); err != nil {
+				return nil, err
+			}
+			if old.Numbering != input.Numbering && allDrawsComplete(t) {
+				if err = assignMatchNumbers(t); err != nil {
+					return nil, err
+				}
+			}
+		} else if err = applyCourtPlan(t); err != nil {
+			return nil, err
+		}
 	}
 	t.UpdatedAt = time.Now().UTC()
 	if err = s.repository.Update(ctx, t); err != nil {

@@ -89,7 +89,7 @@ async function applyNumbering() {
   numberingBusy.value = true
   numberingError.value = ''
   try {
-    await webApi().call(`/tournaments/${t.value.id}/numbering`, 'POST')
+    await webApi().call(`/tournaments/${t.value.id}/numbering`, 'POST', undefined, { revision: numberingPreview.value?.revision })
     await store.refreshFromServer(t.value.id)
     numberingPreview.value = null
   } catch (error: any) {
@@ -110,11 +110,25 @@ const numberingCourts = computed(() => Array.from({ length: t.value?.courts ?? 0
       .sort((a: Match, b: Match) => (a.day ?? 1) - (b.day ?? 1) || a.order - b.order)
   return { court, matches: courtMatches }
 }))
-function hasShortRest(match: Match): boolean {
-  return (numberingPreview.value?.matches ?? []).some((feeder: Match) =>
-    !feeder.isBye && feeder.nextMatchId === match.id &&
-    (feeder.day ?? 1) === (match.day ?? 1) && match.order - feeder.order < 3
-  )
+function scheduleWait(match: Match): number { return match.scheduledWaitMinutes ?? 0 }
+const scheduleBusy = ref(false)
+const scheduleError = ref('')
+function resetColumns() {
+  for (const court of activeCourts.value) localColumns.value[court] = [...(matchesByCourt.value[court] ?? [])]
+}
+async function persistSwap(a: string, b: string): Promise<boolean> {
+  if (!t.value || scheduleBusy.value) return false
+  scheduleBusy.value = true
+  scheduleError.value = ''
+  try {
+    await store.swapMatchPositions(t.value.id, a, b)
+    numberingPreview.value = null
+    return true
+  } catch (error: any) {
+    scheduleError.value = error?.message || 'ذخیره جابه‌جایی ناموفق بود'
+    resetColumns()
+    return false
+  } finally { scheduleBusy.value = false }
 }
 
 const ROUND_NAMES: Record<number, string> = {
@@ -170,7 +184,7 @@ function athleteDisplayName(id: string | null, matchId: string, slot: 1 | 2): st
 }
 
 function matchLabel(match: Match): string {
-  return `${courtLabel(match.court)}${match.matchNumber ?? match.order}`
+  return match.matchNumber ? `${courtLabel(match.court)}${match.matchNumber}` : 'شماره‌گذاری نشده'
 }
 
 // ─── دسته‌بندی‌ها ─────────────────────────────────────────────────────────
@@ -241,7 +255,7 @@ const matchesByCourt = computed(() => {
   for (const c of activeCourts.value) {
     result[c] = t.value.matches
         .filter(m => m.court === c && !m.isBye)
-        .sort((a, b) => a.order - b.order)
+        .sort((a, b) => (a.day ?? 1) - (b.day ?? 1) || a.order - b.order)
   }
   return result
 })
@@ -260,12 +274,21 @@ watch(
     { immediate: true, deep: true }
 )
 
-function onDragEnd(evt: any) {
+async function onDragEnd(evt: any) {
   const matchId = evt.item?.getAttribute('data-id')
   const toCourt = Number(evt.to?.getAttribute('data-court'))
-  const newIndex = evt.newIndex
-  if (!matchId || Number.isNaN(toCourt) || !t.value) return
-  store.moveMatch(t.value.id, matchId, toCourt, newIndex + 1)
+  if (!matchId || !toCourt || !t.value || scheduleBusy.value) { resetColumns(); return }
+  const day = t.value.matches.find(m => m.id === matchId)?.day ?? 1
+  const destination = (localColumns.value[toCourt] ?? []).filter(m => (m.day ?? 1) === day)
+  const newOrder = destination.findIndex(m => m.id === matchId) + 1
+  scheduleBusy.value = true
+  scheduleError.value = ''
+  try {
+    await store.moveMatch(t.value.id, matchId, toCourt, newOrder)
+    numberingPreview.value = null
+  } catch (error: any) {
+    scheduleError.value = error?.message || 'ذخیره جابه‌جایی ناموفق بود'
+  } finally { resetColumns(); scheduleBusy.value = false }
 }
 
 // ─── جابجایی بازی‌ها (click-to-swap) ─────────────────────────────────────
@@ -273,8 +296,8 @@ function onDragEnd(evt: any) {
 const selectedMatchId = ref<string | null>(null)
 const swapMatchResult = ref('')
 
-function onMatchClick(match: Match) {
-  if (match.winnerId) return
+async function onMatchClick(match: Match) {
+  if (match.winnerId || scheduleBusy.value) return
   if (!selectedMatchId.value) {
     selectedMatchId.value = match.id
     return
@@ -283,8 +306,9 @@ function onMatchClick(match: Match) {
     selectedMatchId.value = null
     return
   }
-  store.swapMatchPositions(t.value!.id, selectedMatchId.value, match.id)
-  swapMatchResult.value = 'جابجایی انجام شد'
+  const saved = await persistSwap(selectedMatchId.value, match.id)
+  if (!saved) return
+  swapMatchResult.value = 'جابجایی ذخیره شد'
   selectedMatchId.value = null
   setTimeout(() => (swapMatchResult.value = ''), 2000)
 }
@@ -305,13 +329,13 @@ function findMatchByCode(code: string): Match | null {
   const court = courtIdx + 1
   const number = parseInt(match[2])
   const col = localColumns.value[court] ?? []
-  return col.find((m: Match) => (m.matchNumber ?? m.order) === number) ?? null
+  return col.find((m: Match) => m.matchNumber === number) ?? null
 }
 
 const previewA = computed(() => findMatchByCode(textSwapCodeA.value))
 const previewB = computed(() => findMatchByCode(textSwapCodeB.value))
 
-function doTextSwap() {
+async function doTextSwap() {
   textSwapMessage.value = ''
   const mA = findMatchByCode(textSwapCodeA.value)
   const mB = findMatchByCode(textSwapCodeB.value)
@@ -323,22 +347,10 @@ function doTextSwap() {
     textSwapMessage.value = 'دو بازی یکسان انتخاب شده'
     return
   }
-  // جابجایی در localColumns
-  let colKeyA = -1, colKeyB = -1, idxA = -1, idxB = -1
-  for (const colKey of Object.keys(localColumns.value)) {
-    const key = Number(colKey)
-    const col = localColumns.value[key] as Match[]
-    const i = col.findIndex(m => m.id === mA.id)
-    const j = col.findIndex(m => m.id === mB.id)
-    if (i !== -1) { colKeyA = key; idxA = i }
-    if (j !== -1) { colKeyB = key; idxB = j }
+  if (await persistSwap(mA.id, mB.id)) {
+    textSwapMessage.value = `جابجایی ${textSwapCodeA.value.toUpperCase()} و ${textSwapCodeB.value.toUpperCase()} ذخیره شد`
   }
-  if (colKeyA !== -1 && colKeyB !== -1) {
-    const tmp = localColumns.value[colKeyA][idxA]
-    localColumns.value[colKeyA][idxA] = localColumns.value[colKeyB][idxB]
-    localColumns.value[colKeyB][idxB] = tmp
-    textSwapMessage.value = `بازی ${textSwapCodeA.value.toUpperCase()} و ${textSwapCodeB.value.toUpperCase()} جابجا شد`
-  }
+
 }
 </script>
 
@@ -546,9 +558,11 @@ function doTextSwap() {
 
     <!-- ══════════════ تب زمان‌بندی زمین‌ها ══════════════ -->
     <template v-else-if="activeTab === 'schedule'">
+      <p v-if="scheduleError" role="alert" class="rounded-xl bg-rose-50 p-3 text-sm text-rose-700">{{scheduleError}}</p>
+      <p v-if="scheduleBusy" class="text-sm text-indigo-700">در حال ذخیره جابه‌جایی…</p>
 
       <div class="flex flex-wrap items-center gap-3 rounded-xl border border-indigo-100 bg-indigo-50 p-4">
-        <div class="min-w-0 flex-1"><div class="text-sm font-bold text-indigo-950">تخصیص زمین و شماره‌گذاری</div><div class="mt-1 text-xs text-indigo-700">صف هر زمین بدون نوبت خالی می‌ماند؛ بازی‌های آمادهٔ دیگر تا جای ممکن بین دو بازی یک ورزشکار قرار می‌گیرند. برای شماره‌های A1 و B1، محدودهٔ شماره‌گذاری را در تنظیمات روی «هر زمین در هر روز» بگذارید.</div></div>
+        <div class="min-w-0 flex-1"><div class="text-sm font-bold text-indigo-950">تخصیص زمین و شماره‌گذاری</div><div class="mt-1 text-xs text-indigo-700">برنامهٔ زمین‌ها با احتساب استراحت بین دورها ساخته می‌شود. ترتیب دستی حفظ می‌شود؛ برای ساخت از صفر از «توزیع مجدد بازی‌ها» استفاده کنید. برای شماره‌های A1 و B1، محدودهٔ شماره‌گذاری را در تنظیمات روی «هر زمین در هر روز» بگذارید.</div></div>
         <button :disabled="numberingBusy||!numberingReadiness?.ready" class="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-bold text-white disabled:opacity-50" @click="previewNumbering">{{numberingBusy?'در حال آماده‌سازی…':numberingReadiness?.ready?'پیش‌نمایش شماره‌گذاری':'پس از تکمیل قرعهٔ همهٔ وزن‌ها'}}</button>
         <p v-if="numberingError" class="w-full rounded-lg bg-rose-100 px-3 py-2 text-xs text-rose-800">{{numberingError}}</p>
       </div>
@@ -603,7 +617,7 @@ function doTextSwap() {
           </div>
           <button
               @click="doTextSwap"
-              :disabled="!previewA || !previewB"
+              :disabled="scheduleBusy || !previewA || !previewB"
               class="text-xs bg-indigo-600 text-white rounded-lg px-3 py-1.5 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-indigo-700 transition-colors mt-0.5"
           >اجرا</button>
         </div>
@@ -635,6 +649,7 @@ function doTextSwap() {
           <!-- لیست draggable -->
           <draggable
               :list="localColumns[court]"
+              :disabled="scheduleBusy"
               group="matches"
               item-key="id"
               tag="div"
@@ -676,6 +691,7 @@ function doTextSwap() {
                     </div>
                     <div class="text-[10px] text-slate-400 truncate mb-1.5">{{ match.weightCategory }}</div>
 
+                    <p v-if="match.scheduledStartMinute != null" class="mb-1 text-[10px] text-slate-500">روز {{match.day ?? 1}} · دقیقه {{match.scheduledStartMinute}} تا {{match.scheduledEndMinute}} از شروع روز</p>
                     <!-- طرفین -->
                     <div class="space-y-1">
                       <div
@@ -724,9 +740,9 @@ function doTextSwap() {
 
   <div v-if="numberingPreview" class="fixed inset-0 z-[70] grid place-items-center bg-slate-950/50 p-4" @click.self="numberingPreview=null">
     <section class="max-h-[90vh] w-full max-w-4xl overflow-auto rounded-2xl bg-white p-5 shadow-2xl" dir="rtl">
-      <div class="flex items-start justify-between gap-3"><div><h3 class="text-lg font-black text-slate-900">پیش‌نمایش صف و شمارهٔ زمین‌ها</h3><p class="mt-1 text-sm text-slate-500">صف هر زمین پیوسته است. اگر بازی جایگزین کافی نباشد، فاصلهٔ استراحت کوتاه مشخص می‌شود.</p></div><button class="rounded-lg px-3 py-1 text-slate-500 hover:bg-slate-100" @click="numberingPreview=null">بستن</button></div>
+      <div class="flex items-start justify-between gap-3"><div><h3 class="text-lg font-black text-slate-900">پیش‌نمایش صف و شمارهٔ زمین‌ها</h3><p class="mt-1 text-sm text-slate-500">زمان‌ها از شروع هر روز و به‌صورت تخمینی هستند. بازی‌های آماده فاصلهٔ استراحت را پر می‌کنند؛ انتظار باقی‌مانده مشخص می‌شود. ترتیب دستی حفظ می‌شود.</p></div><button class="rounded-lg px-3 py-1 text-slate-500 hover:bg-slate-100" @click="numberingPreview=null">بستن</button></div>
       <div class="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-        <article v-for="court in numberingCourts" :key="court.court" class="rounded-xl border border-slate-200 p-3"><h4 class="mb-2 font-bold">زمین {{courtLabel(court.court)}}</h4><ol class="space-y-1 text-xs"><li v-for="(match, index) in court.matches" :key="match.id" class="border-b border-slate-100 py-1"><div v-if="hasShortRest(match)" class="mb-1 rounded bg-amber-50 px-2 py-1 font-bold text-amber-800">فاصلهٔ استراحت کم؛ بازی جایگزین کافی نیست</div><div v-if="index === 0 || court.matches[index - 1].weightCategory !== match.weightCategory || court.matches[index - 1].day !== match.day" class="mb-1 rounded bg-indigo-50 px-2 py-1 font-bold text-indigo-800">روز {{match.day ?? 1}} · وزن {{match.weightCategory}}</div><div class="flex gap-2"><b class="shrink-0">{{courtLabel(court.court)}}{{match.matchNumber}}</b><span>{{athleteDisplayName(match.athlete1Id,match.id,1)}} / {{athleteDisplayName(match.athlete2Id,match.id,2)}}</span></div></li></ol><p v-if="!court.matches.length" class="text-xs text-slate-400">بازی ندارد</p></article>
+        <article v-for="court in numberingCourts" :key="court.court" class="rounded-xl border border-slate-200 p-3"><h4 class="mb-2 font-bold">زمین {{courtLabel(court.court)}}</h4><ol class="space-y-1 text-xs"><li v-for="(match, index) in court.matches" :key="match.id" class="border-b border-slate-100 py-1"><div v-if="scheduleWait(match) > 0" class="mb-1 rounded bg-amber-50 px-2 py-1 font-bold text-amber-800">انتظار برنامه‌ریزی‌شده: {{scheduleWait(match)}} دقیقه</div><div v-if="index === 0 || court.matches[index - 1].weightCategory !== match.weightCategory || court.matches[index - 1].day !== match.day" class="mb-1 rounded bg-indigo-50 px-2 py-1 font-bold text-indigo-800">روز {{match.day ?? 1}} · وزن {{match.weightCategory}}</div><div class="flex gap-2"><b class="shrink-0">{{courtLabel(court.court)}}{{match.matchNumber}}</b><span class="text-slate-500">دقیقه {{match.scheduledStartMinute}} تا {{match.scheduledEndMinute}}</span><span>{{athleteDisplayName(match.athlete1Id,match.id,1)}} / {{athleteDisplayName(match.athlete2Id,match.id,2)}}</span></div></li></ol><p v-if="!court.matches.length" class="text-xs text-slate-400">بازی ندارد</p></article>
       </div>
       <p v-if="numberingError" class="mt-3 rounded-lg bg-rose-50 p-3 text-sm text-rose-700">{{numberingError}}</p>
       <div class="mt-5 flex justify-end gap-2"><button :disabled="numberingBusy" class="rounded-lg border px-4 py-2 text-sm" @click="numberingPreview=null">لغو</button><button :disabled="numberingBusy" class="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-bold text-white disabled:opacity-50" @click="applyNumbering">{{numberingBusy?'در حال ثبت…':'تأیید و ثبت شماره‌ها'}}</button></div>

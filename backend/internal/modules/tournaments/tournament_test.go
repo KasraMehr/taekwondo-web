@@ -352,6 +352,8 @@ func TestSettingsTwoDaysAndNumberingModes(t *testing.T) {
 		t.Run(mode, func(t *testing.T) {
 			s, r, id := newFixture(t)
 			settings := *r.value.Settings
+			// This test compares numbers across courts and days.
+			settings.Numbering.Scope = "tournament"
 			settings.Schedule.Mode = mode
 			settings.Schedule.SingleCourt = 3
 			settings.Schedule.DayAssignment = "alternating"
@@ -401,6 +403,13 @@ func TestSettingsTwoDaysAndNumberingModes(t *testing.T) {
 			positions := map[[3]int]bool{}
 			byID := map[string]Match{}
 			for i, m := range result.Matches {
+				byID[m.ID] = m
+				if lifecycleIsBye(&m) {
+					if m.MatchNumber != nil {
+						t.Fatal("bye received a match number")
+					}
+					continue
+				}
 				if m.MatchNumber == nil || numbers[*m.MatchNumber] {
 					t.Fatal("missing/duplicate number")
 				}
@@ -426,6 +435,9 @@ func TestSettingsTwoDaysAndNumberingModes(t *testing.T) {
 				}
 			}
 			for _, m := range result.Matches {
+				if lifecycleIsBye(&m) {
+					continue
+				}
 				if m.NextMatchID != nil {
 					next := byID[*m.NextMatchID]
 					if *m.MatchNumber >= *next.MatchNumber {
@@ -499,6 +511,28 @@ func TestBalancedCourtsWithFivePopulatedCadetCategories(t *testing.T) {
 	if maximum-minimum > 1 {
 		t.Fatalf("expected nearly equal court loads, got %v", loads[1:])
 	}
+	numbered, err := s.NumberMatches(context.Background(), event.ID, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertTimeline(t, numbered)
+	loads = make([]int, numbered.Courts+1)
+	seen := map[[2]int]bool{}
+	for _, m := range numbered.Matches {
+		if lifecycleIsBye(&m) {
+			continue
+		}
+		if m.MatchNumber == nil {
+			t.Fatal("missing match number")
+		}
+		key := [2]int{m.Court, *m.MatchNumber}
+		if seen[key] {
+			t.Fatal("duplicate court number")
+		}
+		seen[key] = true
+		loads[m.Court]++
+	}
+	t.Logf("101 athletes / 96 bouts after scheduling: court loads %v", loads[1:])
 }
 func TestNumberingSettingsAndLocks(t *testing.T) {
 	s, r, id := newFixture(t)

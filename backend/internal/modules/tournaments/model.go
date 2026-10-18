@@ -187,27 +187,30 @@ type TournamentAthlete struct {
 }
 
 type Match struct {
-	Day            int          `json:"day"`
-	ID             string       `json:"id"`
-	Athlete1ID     *string      `json:"athlete1Id"`
-	Athlete2ID     *string      `json:"athlete2Id"`
-	WinnerID       *string      `json:"winnerId,omitempty"`
-	Court          int          `json:"court"`
-	Order          int          `json:"order"`
-	Status         *MatchStatus `json:"status,omitempty"`
-	Result         *MatchResult `json:"result,omitempty"`
-	BracketIndex   *int         `json:"bracketIndex,omitempty"`
-	WeightCategory string       `json:"weightCategory"`
-	Round          int          `json:"round"`
-	Side           MatchSide    `json:"side"`
-	NextMatchID    *string      `json:"nextMatchId,omitempty"`
-	IsBye          *bool        `json:"isBye,omitempty"`
-	NextSlot       *NextSlot    `json:"nextSlot,omitempty"`
-	MatchNumber    *int         `json:"matchNumber,omitempty"`
-	SourceCourt    *int         `json:"sourceCourt,omitempty"`
-	SourceOrder    *int         `json:"sourceOrder,omitempty"`
-	SourceLabel    *string      `json:"sourceLabel,omitempty"`
-	MovedAt        *time.Time   `json:"movedAt,omitempty"`
+	ScheduledStartMinute *int         `json:"scheduledStartMinute,omitempty"`
+	ScheduledEndMinute   *int         `json:"scheduledEndMinute,omitempty"`
+	ScheduledWaitMinutes int          `json:"scheduledWaitMinutes,omitempty"`
+	Day                  int          `json:"day"`
+	ID                   string       `json:"id"`
+	Athlete1ID           *string      `json:"athlete1Id"`
+	Athlete2ID           *string      `json:"athlete2Id"`
+	WinnerID             *string      `json:"winnerId,omitempty"`
+	Court                int          `json:"court"`
+	Order                int          `json:"order"`
+	Status               *MatchStatus `json:"status,omitempty"`
+	Result               *MatchResult `json:"result,omitempty"`
+	BracketIndex         *int         `json:"bracketIndex,omitempty"`
+	WeightCategory       string       `json:"weightCategory"`
+	Round                int          `json:"round"`
+	Side                 MatchSide    `json:"side"`
+	NextMatchID          *string      `json:"nextMatchId,omitempty"`
+	IsBye                *bool        `json:"isBye,omitempty"`
+	NextSlot             *NextSlot    `json:"nextSlot,omitempty"`
+	MatchNumber          *int         `json:"matchNumber,omitempty"`
+	SourceCourt          *int         `json:"sourceCourt,omitempty"`
+	SourceOrder          *int         `json:"sourceOrder,omitempty"`
+	SourceLabel          *string      `json:"sourceLabel,omitempty"`
+	MovedAt              *time.Time   `json:"movedAt,omitempty"`
 }
 
 type MatchStatus string

@@ -90,6 +90,39 @@ function storeFixture() {
   const tournament = store.createTournament('Test', '2026-10-01', 2, 'male', 'بزرگسالان')
   return { store, tournament }
 }
+
+test('manual swap waits for server and uses its saved numbers and revision', async () => {
+  const { store, tournament } = storeFixture()
+  tournament.revision = 7
+  tournament.matches = [
+    { id:'a',court:1,order:1,matchNumber:1,day:1,round:1,weightCategory:'-54',side:'left',athlete1Id:null,athlete2Id:null },
+    { id:'b',court:2,order:2,matchNumber:2,day:1,round:1,weightCategory:'-54',side:'right',athlete1Id:null,athlete2Id:null },
+  ]
+  localStorage.setItem('tkd_session', JSON.stringify({token:'test',orgId:'org',userId:'user'}))
+  const before = JSON.parse(JSON.stringify(tournament))
+  const saved = JSON.parse(JSON.stringify(tournament))
+  Object.assign(saved.matches[0], {court:2,order:2,matchNumber:2})
+  Object.assign(saved.matches[1], {court:1,order:1,matchNumber:1})
+  saved.revision = 8
+  const originalFetch = globalThis.fetch
+  let finish!: (response: Response) => void
+  globalThis.fetch = async (_url, options) => {
+    assert.equal((options?.headers as Record<string,string>)['If-Match'], '"7"')
+    return new Promise<Response>(resolve => { finish = resolve })
+  }
+  try {
+    const request = store.swapMatchPositions(tournament.id, 'a', 'b')
+    assert.deepEqual(JSON.parse(JSON.stringify(store.tournaments[0])), before)
+    finish(new Response(JSON.stringify(saved), {status:200}))
+    await request
+    assert.deepEqual(JSON.parse(JSON.stringify(store.tournaments[0])), saved)
+    const persisted = JSON.parse(localStorage.getItem('tkd_tournaments')!)[0]
+    assert.deepEqual(persisted.matches, saved.matches)
+    globalThis.fetch = async () => new Response(JSON.stringify({message:'conflict'}), {status:409})
+    await assert.rejects(store.swapMatchPositions(tournament.id, 'a', 'b'), /conflict/)
+    assert.deepEqual(JSON.parse(JSON.stringify(store.tournaments[0])), saved)
+  } finally { globalThis.fetch = originalFetch }
+})
 test('store rejects a weight-category edit after a weigh-in', () => {
   const { store, tournament } = storeFixture()
   assert.deepEqual(store.addAthlete(tournament.id, { name: 'A', club: 'Club', weightCategory: '-54' }), {})
