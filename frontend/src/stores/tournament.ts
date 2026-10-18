@@ -703,55 +703,12 @@ export const useTournamentStore = defineStore("tournament", () => {
         return { warning }
     }
 
-    function moveMatch(tournamentId: string, matchId: string, newCourt: number, newOrder: number) {
-        const t = tournaments.value.find((x) => x.id === tournamentId)
-        if (!t) return
-
-        const match = t.matches.find((m) => m.id === matchId)
-        if (!match || match.winnerId || match.isBye) return
-        if (!Number.isFinite(newCourt) || newCourt < 1 || newCourt > t.courts) return
-
-        const oldCourt = match.court
-        const oldOrder = match.order
-        const sameCourt = oldCourt === newCourt
-
-        const destinationMatches = t.matches
-            .filter((m) => m.court === newCourt && !m.isBye && m.id !== match.id)
-            .sort((a, b) => a.order - b.order)
-
-        const safeOrder = Math.max(1, Math.min(Math.floor(newOrder || 1), destinationMatches.length + 1))
-
-        if (!sameCourt) {
-            match.sourceCourt = oldCourt
-            match.sourceOrder = oldOrder
-            match.sourceLabel = `زمین ${oldCourt} - بازی ${oldOrder}`
-        }
-        match.movedAt = new Date().toISOString()
-
-        match.court = newCourt
-        destinationMatches.splice(safeOrder - 1, 0, match)
-        destinationMatches.forEach((m, i) => { m.order = i + 1 })
-
-        if (!sameCourt) {
-            t.matches
-                .filter((m) => m.court === oldCourt && !m.isBye && m.id !== match.id)
-                .sort((a, b) => a.order - b.order)
-                .forEach((m, i) => { m.order = i + 1 })
-        }
-
-        const categoryCourts = [...new Set(
-            t.matches
-                .filter((m) => m.weightCategory === match.weightCategory && !m.isBye)
-                .map((m) => m.court)
-        )].sort((a, b) => a - b)
-
-        if (!t.courtAssignment) t.courtAssignment = {}
-        t.courtAssignment[match.weightCategory] = categoryCourts
-
-        save()
-        remote(() => webApi().call(`/tournaments/${tournamentId}/matches/${matchId}/move`, 'POST', {
-            court: newCourt, order: safeOrder, sourceLabel: match.sourceLabel ?? null,
-        }), tournamentId)
+    async function moveMatch(tournamentId: string, matchId: string, newCourt: number, newOrder: number) {
+        const revision = tournaments.value.find(t => t.id === tournamentId)?.revision
+        await webApi().call(`/tournaments/${tournamentId}/matches/${matchId}/move`, 'POST', {
+            court: newCourt, order: newOrder,
+        }, { revision })
+        await refreshFromServer(tournamentId)
     }
 
     // ─────────────────────── جابه‌جایی ورزشکار ───────────────────────
@@ -988,25 +945,15 @@ export const useTournamentStore = defineStore("tournament", () => {
 
     // ─────────────────────── جابه‌جایی موقعیت بازی‌ها ───────────────────────
 
-    function swapMatchPositions(tournamentId: string, matchIdA: string, matchIdB: string) {
-        const t = tournaments.value.find((x) => x.id === tournamentId)
-        if (!t) return
-        const a = t.matches.find((m) => m.id === matchIdA)
-        const b = t.matches.find((m) => m.id === matchIdB)
-        if (!a || !b) return
-        const tmpCourt = a.court
-        const tmpOrder = a.order
-        a.court = b.court
-        a.order = b.order
-        b.court = tmpCourt
-        b.order = tmpOrder
-        save()
-        remote(() => webApi().call(`/tournaments/${tournamentId}/matches/${matchIdA}/swap-position`, 'POST', {
+    async function swapMatchPositions(tournamentId: string, matchIdA: string, matchIdB: string) {
+        const revision = tournaments.value.find(t => t.id === tournamentId)?.revision
+        const updated = await webApi().call<Tournament>(`/tournaments/${tournamentId}/matches/${matchIdA}/swap-position`, 'POST', {
             otherMatchId: matchIdB,
-        }), tournamentId)
+        }, { revision })
+        replaceFromServer(updated)
     }
 
-// ─────────────────────── مرحله حذفی ───────────────────────
+    // ─────────────────────── مرحله حذفی ───────────────────────
 
     function addEliminationMatch(tournamentId: string, match: EliminationMatch) {
         const t = tournaments.value.find((x) => x.id === tournamentId)
