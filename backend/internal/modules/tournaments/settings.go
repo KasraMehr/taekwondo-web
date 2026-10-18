@@ -252,7 +252,10 @@ func (s *tournamentService) UpdateSettings(ctx context.Context, id string, input
 	if err != nil {
 		return nil, err
 	}
-	if input.Schedule.DayAssignment == "alternating" {
+	if len(input.Schedule.Days) == 1 {
+		input.Schedule.DayAssignment = "manual"
+		input.Schedule.CategoryDays = map[string]int{}
+	} else if input.Schedule.DayAssignment == "alternating" {
 		input.Schedule.CategoryDays = map[string]int{}
 		for i, cat := range WeightOptions(t.AgeCategory, t.Gender) {
 			input.Schedule.CategoryDays[cat] = i%2 + 1
@@ -298,24 +301,30 @@ func (s *tournamentService) UpdateSettings(ctx context.Context, id string, input
 
 	t.Settings = &input
 	scheduleChanged := !reflect.DeepEqual(old.Schedule, input.Schedule) || old.Numbering != input.Numbering || !reflect.DeepEqual(old.Hogu, input.Hogu)
-	if scheduleChanged && !hasStartedMatches(t) && !hasManualSchedule(t) {
-		clearMatchNumbers(t)
+	// Explicit placement/order choices supersede an older manual queue. Timing
+	// and number-format edits keep that queue and only update derived values.
+	if scheduleChanged && !hasStartedMatches(t) && placementSettingsChanged(old, input) {
+		clearManualSchedule(t)
 	}
 	for i := range t.Matches {
 		t.Matches[i].Day = dayForCategory(t, t.Matches[i].WeightCategory)
 	}
 	if scheduleChanged && !hasStartedMatches(t) {
-		if hasManualSchedule(t) {
-			if err = buildScheduleTimeline(t, true); err != nil {
+		if !hasManualSchedule(t) {
+			clearMatchNumbers(t)
+			if err = applyCourtPlan(t); err != nil {
 				return nil, err
 			}
-			if old.Numbering != input.Numbering && allDrawsComplete(t) {
-				if err = assignMatchNumbers(t); err != nil {
-					return nil, err
-				}
+		}
+		if allDrawsComplete(t) {
+			if err = scheduleRestAwareOrders(t); err != nil {
+				return nil, err
 			}
-		} else if err = applyCourtPlan(t); err != nil {
-			return nil, err
+			if err = assignMatchNumbers(t); err != nil {
+				return nil, err
+			}
+		} else {
+			clearMatchNumbers(t)
 		}
 	}
 	t.UpdatedAt = time.Now().UTC()
@@ -323,4 +332,15 @@ func (s *tournamentService) UpdateSettings(ctx context.Context, id string, input
 		return nil, err
 	}
 	return t, nil
+}
+
+func placementSettingsChanged(old, next TournamentSettings) bool {
+	a, b := old.Schedule, next.Schedule
+	if a.Mode != b.Mode || (b.Mode == "single_court" && a.SingleCourt != b.SingleCourt) || a.FinalCourtPolicy != b.FinalCourtPolicy || (b.FinalCourtPolicy == "fixed" && a.FinalCourt != b.FinalCourt) || old.Numbering.Order != next.Numbering.Order {
+		return true
+	}
+	if len(a.Days) != len(b.Days) || !reflect.DeepEqual(a.CategoryDays, b.CategoryDays) {
+		return true
+	}
+	return old.Hogu.Enabled != next.Hogu.Enabled || next.Hogu.Enabled && (!reflect.DeepEqual(old.Hogu.CourtSizes, next.Hogu.CourtSizes) || !reflect.DeepEqual(old.Hogu.CategorySizes, next.Hogu.CategorySizes))
 }
