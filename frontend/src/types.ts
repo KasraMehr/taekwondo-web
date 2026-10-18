@@ -13,6 +13,9 @@ export interface Athlete {
 }
 
 export interface Match {
+    scheduledStartMinute?: number
+    scheduledEndMinute?: number
+    scheduledWaitMinutes?: number
     id: string
     athlete1Id: string | null
     athlete2Id: string | null
@@ -88,6 +91,7 @@ export type TournamentFormat = 'grandPrix' | 'team'
 
 
 export interface Tournament {
+    revision?: number
     id: string;
     name: string;
     date: string;
