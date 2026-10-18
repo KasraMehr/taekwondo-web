@@ -123,6 +123,41 @@ test('manual swap waits for server and uses its saved numbers and revision', asy
     assert.deepEqual(JSON.parse(JSON.stringify(store.tournaments[0])), saved)
   } finally { globalThis.fetch = originalFetch }
 })
+
+test('saved settings and numbering replace the local tournament only after a confirmed response', async () => {
+  const {store,tournament} = storeFixture()
+  tournament.revision = 2
+  tournament.matches = [{id:'bout',court:1,order:1,day:1,round:1,weightCategory:'-54',side:'final',athlete1Id:null,athlete2Id:null}]
+  localStorage.setItem('tkd_session',JSON.stringify({token:'test',orgId:'org',userId:'user'}))
+  const before = JSON.parse(JSON.stringify(tournament))
+  const originalFetch = globalThis.fetch
+  try {
+    globalThis.fetch = async (_url,options) => {
+      assert.equal((options?.headers as Record<string,string>)['If-Match'],'"2"')
+      return new Response(JSON.stringify({message:'rejected'}),{status:409})
+    }
+    await assert.rejects(store.saveTournamentSettings(tournament.id,{schedule:{mode:'single_court'}}),/rejected/)
+    assert.deepEqual(JSON.parse(JSON.stringify(store.tournaments[0])),before)
+    const saved = JSON.parse(JSON.stringify(before))
+    saved.revision = 3
+    saved.matches[0].matchNumber = 21
+    saved.settings = {schedule:{mode:'single_court'},numbering:{startAt:21}}
+    globalThis.fetch = async (_url,options) => {
+      assert.equal((options?.headers as Record<string,string>)['If-Match'],'"2"')
+      return new Response(JSON.stringify(saved),{status:200})
+    }
+    await store.saveTournamentSettings(tournament.id,{schedule:{mode:'single_court'}})
+    assert.equal(store.tournaments[0].matches[0].matchNumber,21)
+    assert.equal(JSON.parse(localStorage.getItem('tkd_tournaments')!)[0].matches[0].matchNumber,21)
+    const numbered = {...saved,revision:4,matches:[{...saved.matches[0],matchNumber:22}]}
+    globalThis.fetch = async (_url,options) => {
+      assert.equal((options?.headers as Record<string,string>)['If-Match'],'"3"')
+      return new Response(JSON.stringify(numbered),{status:200})
+    }
+    await store.applyMatchNumbering(tournament.id)
+    assert.equal(store.tournaments[0].matches[0].matchNumber,22)
+  } finally { globalThis.fetch = originalFetch }
+})
 test('store rejects a weight-category edit after a weigh-in', () => {
   const { store, tournament } = storeFixture()
   assert.deepEqual(store.addAthlete(tournament.id, { name: 'A', club: 'Club', weightCategory: '-54' }), {})
