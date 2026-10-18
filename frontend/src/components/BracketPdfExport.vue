@@ -1,4 +1,5 @@
 <template>
+  <p v-if="printError" role="alert" class="no-print rounded-xl bg-rose-50 p-4 text-sm text-rose-700">{{ printError }}</p>
   <!-- دکمه اصلی چاپ -->
   <div class="no-print fixed bottom-6 left-6 z-50 flex flex-wrap gap-2">
   <button
@@ -357,6 +358,7 @@ import {
 } from 'vue'
 
 import { useTournamentStore } from '../stores/tournament'
+import { savedSession } from '../webApi'
 import {
   buildBracketColumns,
   courtLabel,
@@ -441,6 +443,8 @@ type BracketPage = {
 }
 
 const store = useTournamentStore()
+const printError = ref('')
+const printBusy = ref(false)
 const t = computed(() => store.currentTournament)
 
 const athletes = computed<AthleteLike[]>(
@@ -548,7 +552,7 @@ function courtToken(court: number): string {
 /** Compact court and match identifier, kept left-to-right in print. */
 function matchTag(match: MatchLike): string {
   if (isTrueBye(match)) return ''
-  const number = match.matchNumber && match.matchNumber > 0 ? match.matchNumber : match.order
+  const number = match.matchNumber
   if (!number || number < 1 || match.court < 1) return 'شماره‌گذاری نشده'
   return `${courtToken(match.court)}${number}`
 }
@@ -1284,6 +1288,7 @@ function getWeightLabel(category: string): string {
 
 
 async function print(numbered = true): Promise<void> {
+  if (!await refreshPrintData()) return
   showMatchNumbers.value = numbered
   await document.fonts.ready
   await nextTick()
@@ -1300,6 +1305,7 @@ async function print(numbered = true): Promise<void> {
 async function printCategory(
     category: string
 ): Promise<void> {
+  if (!await refreshPrintData()) return
   const previousCategory = selectedCategory.value
 
   selectedCategory.value = category
@@ -1329,6 +1335,18 @@ async function printCategory(
   )
 }
 
+async function refreshPrintData(): Promise<boolean> {
+  if (printBusy.value || !t.value) return false
+  printBusy.value = true
+  printError.value = ''
+  try {
+    if (savedSession()) await store.refreshFromServer(t.value.id)
+    return true
+  } catch (error: any) {
+    printError.value = error?.message || 'دریافت آخرین برنامه برای چاپ ناموفق بود'
+    return false
+  } finally { printBusy.value = false }
+}
 </script>
 
 <style>
