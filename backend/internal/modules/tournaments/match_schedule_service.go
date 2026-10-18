@@ -3,6 +3,7 @@ package tournaments
 import (
 	"context"
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 )
@@ -211,8 +212,8 @@ func schedulingCloneMatches(
 	return &updated
 }
 
-// MoveMatch moves a match to an unoccupied court/order position.
-// MatchNumber is preserved and must be available on the target court.
+// MoveMatch inserts into a court queue and saves all shifted orders and numbers
+// atomically after validating the combined court/bracket timeline.
 func (s *tournamentService) MoveMatch(
 	ctx context.Context,
 	tournamentID string,
@@ -292,8 +293,8 @@ func (s *tournamentService) ReassignMatchCourt(
 	for i := range tournament.Matches {
 		other := &tournament.Matches[i]
 
-		if other.Court == input.Court && other.Order > maxOrder {
-			maxOrder = other.Order
+		if other.Day == match.Day && other.Court == input.Court && !lifecycleIsBye(other) {
+			maxOrder++
 		}
 	}
 
@@ -361,6 +362,9 @@ func (s *tournamentService) SwapMatchPositions(
 		return nil, err
 	}
 
+	if hasStartedMatches(tournament) {
+		return nil, ErrMatchLocked
+	}
 	first := &tournament.Matches[firstIndex]
 	second := &tournament.Matches[secondIndex]
 
@@ -425,6 +429,9 @@ func (s *tournamentService) SwapMatchPositions(
 		}
 	}
 
+	if err := buildScheduleTimeline(updated, true); err != nil {
+		return nil, err
+	}
 	now := time.Now().UTC()
 
 	schedulingRecordMovement(updatedFirst, first, nil, now)
@@ -447,72 +454,73 @@ func (s *tournamentService) SwapMatchPositions(
 // schedulingMoveLoadedMatch operates on a tournament already loaded
 // by the caller and persists the resulting change once.
 func (s *tournamentService) schedulingMoveLoadedMatch(
-	ctx context.Context,
-	tournament *Tournament,
-	index int,
-	court int,
-	order int,
-	sourceLabel *string,
+	ctx context.Context, tournament *Tournament, index int, court int, order int, sourceLabel *string,
 ) (*Match, error) {
+	if hasStartedMatches(tournament) {
+		return nil, ErrMatchLocked
+	}
 	match := &tournament.Matches[index]
-
 	if err := schedulingValidateEditable(match); err != nil {
 		return nil, err
 	}
-
-	if err := lifecycleValidateCourt(tournament, match); err != nil {
+	if err := schedulingValidateTargetCourt(tournament, court); err != nil {
 		return nil, err
 	}
-
-	if err := schedulingValidatePositionAvailable(
-		tournament,
-		index,
-		court,
-		order,
-	); err != nil {
+	if order < 1 {
+		return nil, ErrInvalidMatchPosition
+	}
+	updated := schedulingCloneMatches(tournament)
+	queue := []int{}
+	for i, m := range updated.Matches {
+		if i != index && m.Day == match.Day && m.Court == court && !lifecycleIsBye(&m) {
+			queue = append(queue, i)
+		}
+	}
+	sort.SliceStable(queue, func(a, b int) bool { return updated.Matches[queue[a]].Order < updated.Matches[queue[b]].Order })
+	if order > len(queue)+1 {
+		return nil, ErrInvalidMatchPosition
+	}
+	queue = append(queue, 0)
+	copy(queue[order:], queue[order-1:])
+	queue[order-1] = index
+	updated.Matches[index].Court = court
+	for pos, i := range queue {
+		updated.Matches[i].Order = pos + 1
+	}
+	if match.Court != court {
+		source := []int{}
+		for i, m := range updated.Matches {
+			if m.Day == match.Day && m.Court == match.Court && !lifecycleIsBye(&m) {
+				source = append(source, i)
+			}
+		}
+		sort.SliceStable(source, func(a, b int) bool { return updated.Matches[source[a]].Order < updated.Matches[source[b]].Order })
+		for pos, i := range source {
+			updated.Matches[i].Order = pos + 1
+		}
+	}
+	if err := buildScheduleTimeline(updated, true); err != nil {
 		return nil, err
 	}
-
-	if match.MatchNumber != nil {
-		if err := schedulingValidateNumberAvailable(
-			tournament,
-			index,
-			court,
-			*match.MatchNumber,
-		); err != nil {
+	numbered := false
+	for _, m := range tournament.Matches {
+		if m.MatchNumber != nil {
+			numbered = true
+			break
+		}
+	}
+	if numbered {
+		if err := assignMatchNumbers(updated); err != nil {
 			return nil, err
 		}
 	}
-
-	if match.Court == court && match.Order == order {
-		return schedulingCopyMatch(match), nil
-	}
-
-	updated := schedulingCloneMatches(tournament)
-	moved := &updated.Matches[index]
-
-	moved.Court = court
-	moved.Order = order
-
-	if err := schedulingValidateBracketOrder(updated, index); err != nil {
+	now := time.Now().UTC()
+	schedulingRecordMovement(&updated.Matches[index], match, sourceLabel, now)
+	updated.UpdatedAt = now
+	if err := s.repository.Update(ctx, updated); err != nil {
 		return nil, err
 	}
-
-	now := time.Now().UTC()
-
-	schedulingRecordMovement(moved, match, sourceLabel, now)
-	updated.UpdatedAt = now
-
-	if err := s.repository.Update(ctx, updated); err != nil {
-		return nil, fmt.Errorf(
-			"move match %s in tournament %s: %w",
-			match.ID,
-			tournament.ID,
-			err,
-		)
-	}
-
-	return schedulingCopyMatch(moved), nil
+	return schedulingCopyMatch(&updated.Matches[index]), nil
 }
 
 func schedulingValidateTargetCourt(

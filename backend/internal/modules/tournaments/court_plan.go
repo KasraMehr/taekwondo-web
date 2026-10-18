@@ -90,9 +90,13 @@ func applyCourtPlanSingleDay(t *Tournament) {
 		case "split_halves":
 			courts = courts[:min(2, t.Courts)]
 		case "balanced":
-			courts = courts[:categoryCourtCount(stat.load, len(courts))]
+			// All compatible courts participate; keep split halves as a separate mode.
 		}
-		assignCategoryCourts(t.Matches, stat.category, courts)
+		if settings.Mode == "balanced" {
+			assignCategoryCourtsBalanced(t.Matches, stat.category, courts, loads)
+		} else {
+			assignCategoryCourts(t.Matches, stat.category, courts)
+		}
 		used := map[int]bool{}
 		maxRound := 0
 		for _, m := range t.Matches {
@@ -297,6 +301,12 @@ func (s *tournamentService) RebalanceCourts(ctx context.Context, id string) (*To
 	if hasStartedMatches(t) {
 		return nil, ErrMatchLocked
 	}
+	for i := range t.Matches {
+		t.Matches[i].MovedAt = nil
+		t.Matches[i].SourceCourt = nil
+		t.Matches[i].SourceOrder = nil
+		t.Matches[i].SourceLabel = nil
+	}
 	clearMatchNumbers(t)
 	if err := applyCourtPlan(t); err != nil {
 		return nil, err
@@ -407,17 +417,28 @@ func applyHoguCourtPlan(t *Tournament) error {
 		})
 		if scheduleMode == "split_halves" && len(compatible) > 2 {
 			compatible = compatible[:2]
-		} else if scheduleMode == "balanced" {
-			playable := 0
-			for _, match := range t.Matches {
-				if match.WeightCategory == category && !lifecycleIsBye(&match) {
-					playable++
-				}
-			}
-			compatible = compatible[:categoryCourtCount(playable, len(compatible))]
 		}
-		assignCategoryCourts(t.Matches, category, compatible)
+		if scheduleMode == "balanced" {
+			assignCategoryCourtsBalanced(t.Matches, category, compatible, loads)
+		} else {
+			assignCategoryCourts(t.Matches, category, compatible)
+		}
+
+		maxRound := 0
+		for _, m := range t.Matches {
+			if m.WeightCategory == category {
+				maxRound = max(maxRound, m.Round)
+			}
+		}
 		for i := range t.Matches {
+			m := &t.Matches[i]
+			if m.WeightCategory == category && !lifecycleIsBye(m) && scheduleMode != "single_court" && settingsFor(t).Schedule.FinalCourtPolicy == "fixed" && m.Round == maxRound {
+				finalCourt := settingsFor(t).Schedule.FinalCourt
+				if !containsString(hogu.CourtSizes[finalCourt], size) {
+					return fmt.Errorf("%w: final court does not have hogu size %s", ErrInvalidCourt, size)
+				}
+				m.Court = finalCourt
+			}
 			if court, ok := moved[t.Matches[i].ID]; ok {
 				t.Matches[i].Court = court
 			}
