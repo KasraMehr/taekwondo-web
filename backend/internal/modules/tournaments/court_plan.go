@@ -301,21 +301,33 @@ func (s *tournamentService) RebalanceCourts(ctx context.Context, id string) (*To
 	if hasStartedMatches(t) {
 		return nil, ErrMatchLocked
 	}
-	for i := range t.Matches {
-		t.Matches[i].MovedAt = nil
-		t.Matches[i].SourceCourt = nil
-		t.Matches[i].SourceOrder = nil
-		t.Matches[i].SourceLabel = nil
-	}
+	clearManualSchedule(t)
 	clearMatchNumbers(t)
 	if err := applyCourtPlan(t); err != nil {
 		return nil, err
+	}
+	if allDrawsComplete(t) {
+		if err := scheduleRestAwareOrders(t); err != nil {
+			return nil, err
+		}
+		if err := assignMatchNumbers(t); err != nil {
+			return nil, err
+		}
 	}
 	t.UpdatedAt = time.Now().UTC()
 	if err = s.repository.Update(ctx, t); err != nil {
 		return nil, err
 	}
 	return t, nil
+}
+
+func clearManualSchedule(t *Tournament) {
+	for i := range t.Matches {
+		t.Matches[i].MovedAt = nil
+		t.Matches[i].SourceCourt = nil
+		t.Matches[i].SourceOrder = nil
+		t.Matches[i].SourceLabel = nil
+	}
 }
 
 func applyCourtPlan(t *Tournament) error {

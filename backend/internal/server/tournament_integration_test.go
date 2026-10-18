@@ -99,6 +99,24 @@ func TestPostgresTournamentHTTPFlow(t *testing.T) {
 	if len(numbered.Athletes) != 4 || numbered.Matches[0].MatchNumber == nil {
 		t.Fatal("numbering failed")
 	}
+	// Saving court settings must also persist the new court queue and numbers.
+	settings := *numbered.Settings
+	settings.Schedule.Mode = "single_court"
+	settings.Schedule.SingleCourt = 1
+	settings.Numbering.StartAt = 11
+	numbered = decode[tournaments.Tournament](t, requestJSON(t, router, "PUT", path+"/settings", token, settings, 200))
+	for _, m := range numbered.Matches {
+		if m.IsBye != nil && *m.IsBye {
+			continue
+		}
+		if m.Court != 1 || m.MatchNumber == nil || *m.MatchNumber < 11 {
+			t.Fatal("settings save did not apply court/numbering")
+		}
+	}
+	reloaded := decode[tournaments.Tournament](t, requestJSON(t, router, "GET", path, token, nil, 200))
+	if reloaded.Revision != numbered.Revision || reloaded.Matches[0].MatchNumber == nil || *reloaded.Matches[0].MatchNumber != *numbered.Matches[0].MatchNumber {
+		t.Fatal("saved settings or numbering vanished on reload")
+	}
 	// Two officials cannot start two matches on the same court concurrently.
 	playable := []tournaments.Match{}
 	for _, m := range numbered.Matches {

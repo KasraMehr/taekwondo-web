@@ -73,6 +73,26 @@ export const useTournamentStore = defineStore("tournament", () => {
         replaceFromServer(await webApi().call<Tournament>(`/tournaments/${tournamentId}`))
     }
 
+    async function saveTournamentSettings(tournamentId: string, settings: Record<string, unknown>) {
+        const revision = tournaments.value.find(t => t.id === tournamentId)?.revision
+        const updated = await webApi().call<Tournament & { settings: Record<string, unknown> }>(
+            `/tournaments/${tournamentId}/settings`, 'PUT', settings, { revision },
+        )
+        replaceFromServer(updated)
+        return updated
+    }
+
+    async function applyMatchNumbering(tournamentId: string, previewRevision?: number) {
+        const revision = previewRevision ?? tournaments.value.find(t => t.id === tournamentId)?.revision
+        const updated = await webApi().call<Tournament>(`/tournaments/${tournamentId}/numbering`, 'POST', undefined, { revision })
+        const playable = updated.matches.filter(m => !m.isBye)
+        if (!playable.length || playable.some(m => !m.matchNumber || m.matchNumber < 1)) {
+            throw new Error('سرور شمارهٔ معتبر برای همهٔ بازی‌ها برنگرداند؛ شماره‌گذاری ثبت نشده است')
+        }
+        replaceFromServer(updated)
+        return updated
+    }
+
     function remote(task: () => Promise<unknown>, tournamentId?: string) {
         try {
             void task()
@@ -1455,6 +1475,8 @@ export const useTournamentStore = defineStore("tournament", () => {
         currentTournamentId,
         currentTournament,
         replaceFromServer,
+        saveTournamentSettings,
+        applyMatchNumbering,
         refreshFromServer,
         createTournament,
         deleteTournament,
