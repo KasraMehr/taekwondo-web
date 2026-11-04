@@ -95,6 +95,8 @@ var (
 type TournamentService interface {
 	ImportSnapshot(context.Context, string, ImportTournamentInput) (*Tournament, error)
 	NumberMatches(context.Context, string, bool) (*Tournament, error)
+	NumberMatchesWithPriority(context.Context, string, bool, []string) (*Tournament, error)
+	NumberMatchesWithPlan(context.Context, string, bool, []string, map[string][]int, *GuidedNumberingOptions) (*Tournament, error)
 	UpdateSettings(context.Context, string, TournamentSettings) (*Tournament, error)
 	RebalanceCourts(context.Context, string) (*Tournament, error)
 	ResetWeighIn(context.Context, string, string) (*TournamentAthlete, error)
