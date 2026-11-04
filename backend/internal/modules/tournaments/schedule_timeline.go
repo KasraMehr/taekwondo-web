@@ -18,6 +18,14 @@ func hasManualSchedule(t *Tournament) bool {
 // Preserve mode keeps the entire approved queue, including manual edits.
 // Automatic mode fills available court time with independent bouts first.
 func buildScheduleTimeline(t *Tournament, preserve bool) error {
+	return buildScheduleTimelineWithPriority(t, preserve, nil)
+}
+
+func buildScheduleTimelineWithPriority(t *Tournament, preserve bool, categoryOrder []string) error {
+	return buildScheduleTimelineWithPlan(t, preserve, categoryOrder, nil)
+}
+
+func buildScheduleTimelineWithPlan(t *Tournament, preserve bool, categoryOrder []string, categoryCourts map[string][]int) error {
 	settings := settingsFor(t)
 	duration, rest := settings.Schedule.MatchMinutes, settings.Schedule.RestMinutes
 	if duration == 0 {
@@ -29,6 +37,11 @@ func buildScheduleTimeline(t *Tournament, preserve bool) error {
 	weightRank := map[string]int{}
 	for rank, category := range WeightOptions(t.AgeCategory, t.Gender) {
 		weightRank[category] = rank
+	}
+	if len(categoryOrder) > 0 {
+		for rank, category := range categoryOrder {
+			weightRank[category] = rank
+		}
 	}
 	indices := []int{}
 	for i := range t.Matches {
@@ -155,7 +168,12 @@ func buildScheduleTimeline(t *Tournament, preserve bool) error {
 				continue
 			}
 			courts := []int{m.Court}
-			if !preserve && settings.Schedule.Mode == "balanced" && !(settings.Schedule.FinalCourtPolicy == "fixed" && m.Round == maxRound[m.WeightCategory]) {
+			if !preserve && categoryCourts != nil {
+				courts = categoryCourts[m.WeightCategory]
+				if m.Round == maxRound[m.WeightCategory] {
+					courts = courts[:1]
+				}
+			} else if !preserve && settings.Schedule.Mode == "balanced" && !(settings.Schedule.FinalCourtPolicy == "fixed" && m.Round == maxRound[m.WeightCategory]) {
 				courts = nil
 				for court := 1; court <= t.Courts; court++ {
 					if !settings.Hogu.Enabled || containsString(settings.Hogu.CourtSizes[court], settings.Hogu.CategorySizes[m.WeightCategory]) {
@@ -165,13 +183,16 @@ func buildScheduleTimeline(t *Tournament, preserve bool) error {
 			}
 			for _, court := range courts {
 				at := max(earliest, available[[2]int{m.Day, court}])
+				if settings.Hogu.Enabled && len(settings.Hogu.PairCounts) > 0 {
+					at = nextHoguAvailable(t, done, settings.Hogu, m.WeightCategory, m.Day, at, duration)
+				}
 				better := selected < 0
 				if !better {
 					other := t.Matches[selected]
 					stage, otherStage := maxRound[m.WeightCategory]-m.Round, maxRound[other.WeightCategory]-other.Round
 					priority := stage > otherStage
 					if stage == otherStage {
-						if settings.Numbering.Order == "category" && m.WeightCategory != other.WeightCategory {
+						if (settings.Numbering.Order == "category" || len(categoryOrder) > 0) && m.WeightCategory != other.WeightCategory {
 							priority = weightRank[m.WeightCategory] < weightRank[other.WeightCategory]
 						} else if i == selected {
 							priority = nextOrder[[2]int{m.Day, court}] < nextOrder[[2]int{m.Day, selectedCourt}]
@@ -211,6 +232,36 @@ func buildScheduleTimeline(t *Tournament, preserve bool) error {
 		sort.Ints(courts)
 	}
 	return nil
+}
+
+func nextHoguAvailable(t *Tournament, done map[int]bool, hogu HoguSettings, category string, day, start, duration int) int {
+	size := hogu.CategorySizes[category]
+	capacity := hogu.PairCounts[size]
+	if capacity < 1 {
+		return start
+	}
+	for {
+		concurrent, next := 0, 0
+		for i := range t.Matches {
+			if !done[i] {
+				continue
+			}
+			m := t.Matches[i]
+			if m.Day != day || hogu.CategorySizes[m.WeightCategory] != size || m.ScheduledStartMinute == nil || m.ScheduledEndMinute == nil {
+				continue
+			}
+			if *m.ScheduledStartMinute < start+duration && *m.ScheduledEndMinute > start {
+				concurrent++
+				if next == 0 || *m.ScheduledEndMinute < next {
+					next = *m.ScheduledEndMinute
+				}
+			}
+		}
+		if concurrent < capacity || next <= start {
+			return start
+		}
+		start = next
+	}
 }
 
 func containsString(values []string, value string) bool {
