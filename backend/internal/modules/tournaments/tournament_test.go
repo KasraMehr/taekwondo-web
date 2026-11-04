@@ -473,6 +473,60 @@ func TestSettingsTwoDaysAndNumberingModes(t *testing.T) {
 	}
 }
 
+func TestGuidedNumberingRespectsSelectionsAndPreview(t *testing.T) {
+	s, repo, id := newFixture(t)
+	for _, category := range []string{"-54", "-58"} {
+		enter(t, s, id, category, 4)
+		if _, err := s.DrawBracketForCategory(context.Background(), id, category, "ranking"); err != nil {
+			t.Fatal(err)
+		}
+	}
+	courts := map[string][]int{"-54": {2, 3}, "-58": {1}}
+	options := &GuidedNumberingOptions{MatchMinutes: 7, RestMinutes: 12, StartAt: 101, LimitHogu: true, HoguPairs: map[string]int{"2": 1, "3": 1}}
+	before := repo.writes
+	preview, err := s.NumberMatchesWithPlan(context.Background(), id, true, []string{"-58", "-54"}, courts, options)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if repo.writes != before {
+		t.Fatal("preview persisted changes")
+	}
+	saved, err := s.NumberMatchesWithPlan(context.Background(), id, false, []string{"-58", "-54"}, courts, options)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if saved.Settings.Schedule.MatchMinutes != 7 || saved.Settings.Schedule.RestMinutes != 12 || saved.Settings.Numbering.StartAt != 101 {
+		t.Fatal("guided settings were not saved")
+	}
+	if !saved.Settings.Hogu.Enabled || saved.Settings.Hogu.PairCounts["2"] != 1 {
+		t.Fatal("hogu inventory was not saved")
+	}
+	for i, match := range saved.Matches {
+		if lifecycleIsBye(&match) {
+			continue
+		}
+		if !containsInt(courts[match.WeightCategory], match.Court) {
+			t.Fatalf("match escaped selected courts: %+v", match)
+		}
+		if match.MatchNumber == nil || *match.MatchNumber < 101 || preview.Matches[i].MatchNumber == nil || *preview.Matches[i].MatchNumber != *match.MatchNumber {
+			t.Fatal("preview and saved numbers differ")
+		}
+	}
+	for i, a := range saved.Matches {
+		if lifecycleIsBye(&a) {
+			continue
+		}
+		for _, b := range saved.Matches[i+1:] {
+			if lifecycleIsBye(&b) || a.Day != b.Day || saved.Settings.Hogu.CategorySizes[a.WeightCategory] != saved.Settings.Hogu.CategorySizes[b.WeightCategory] {
+				continue
+			}
+			if *a.ScheduledStartMinute < *b.ScheduledEndMinute && *b.ScheduledStartMinute < *a.ScheduledEndMinute {
+				t.Fatalf("one hogu pair scheduled twice: %s and %s", a.ID, b.ID)
+			}
+		}
+	}
+}
+
 func TestBalancedCourtsWithFivePopulatedCadetCategories(t *testing.T) {
 	r := &memoryRepository{profiles: map[string]*AthleteProfile{}}
 	s := NewTournamentService(r)
