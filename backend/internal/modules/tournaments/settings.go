@@ -25,6 +25,7 @@ type HoguSettings struct {
 	Enabled       bool              `json:"enabled"`
 	CourtSizes    map[int][]string  `json:"courtSizes"`
 	CategorySizes map[string]string `json:"categorySizes"`
+	PairCounts    map[string]int    `json:"pairCounts,omitempty"`
 }
 
 type ScoringSettings struct {
@@ -111,11 +112,40 @@ func validHoguSize(size string) bool {
 
 // defaultHoguSizeForCategory provides a practical default from the weight limit.
 // Organizers can still override exceptional categories in tournament settings.
-func defaultHoguSizeForCategory(category string) string {
+func defaultHoguSizeForCategory(age AgeCategory, category string) string {
 	value := strings.TrimSpace(strings.TrimLeft(category, "+-"))
 	weight, err := strconv.Atoi(value)
 	if err != nil {
 		return ""
+	}
+	if strings.HasPrefix(strings.TrimSpace(category), "+") {
+		weight++
+	}
+	switch age {
+	case AgeCategoryKhordsalan:
+		if weight <= 36 {
+			return "1"
+		}
+		if weight <= 52 {
+			return "2"
+		}
+		return "3"
+	case AgeCategoryNonehalan:
+		if weight <= 41 {
+			return "1"
+		}
+		if weight <= 59 {
+			return "2"
+		}
+		return "3"
+	case AgeCategoryNojavanan:
+		if weight <= 49 {
+			return "2"
+		}
+		if weight <= 68 {
+			return "3"
+		}
+		return "4"
 	}
 	switch {
 	case weight <= 40:
@@ -129,13 +159,31 @@ func defaultHoguSizeForCategory(category string) string {
 	}
 }
 
+func legacyHoguSizeForCategory(category string) string {
+	value := strings.TrimSpace(strings.TrimLeft(category, "+-"))
+	weight, err := strconv.Atoi(value)
+	if err != nil {
+		return ""
+	}
+	if weight <= 40 {
+		return "1"
+	}
+	if weight <= 55 {
+		return "2"
+	}
+	if weight <= 70 {
+		return "3"
+	}
+	return "4"
+}
+
 func applyDefaultHoguSizes(t *Tournament, hogu *HoguSettings) {
 	if hogu.CategorySizes == nil {
 		hogu.CategorySizes = map[string]string{}
 	}
 	for _, category := range WeightOptions(t.AgeCategory, t.Gender) {
-		if !validHoguSize(strings.TrimSpace(hogu.CategorySizes[category])) {
-			hogu.CategorySizes[category] = defaultHoguSizeForCategory(category)
+		if !validHoguSize(strings.TrimSpace(hogu.CategorySizes[category])) || t.AgeCategory != AgeCategoryBozorgsalan && t.AgeCategory != AgeCategoryOmidha && hogu.CategorySizes[category] == legacyHoguSizeForCategory(category) {
+			hogu.CategorySizes[category] = defaultHoguSizeForCategory(t.AgeCategory, category)
 		}
 	}
 }
@@ -180,6 +228,11 @@ func validateSettings(t *Tournament, s TournamentSettings) error {
 		return invalid("numbering order must be rounds or category")
 	}
 	if s.Hogu.Enabled {
+		for size, count := range s.Hogu.PairCounts {
+			if !validHoguSize(size) || count < 0 || count > 100 {
+				return invalid("invalid hogu pair inventory")
+			}
+		}
 		for court := 1; court <= t.Courts; court++ {
 			if len(s.Hogu.CourtSizes[court]) == 0 {
 				return invalid(fmt.Sprintf("choose at least one hogu size for court %d", court))
