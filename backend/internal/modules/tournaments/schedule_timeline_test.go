@@ -63,6 +63,37 @@ func TestTimelineCrossCourtRestAndFillerBouts(t *testing.T) {
 	}
 }
 
+func TestGuidedCourtChoicesStayWithinSelectedCourts(t *testing.T) {
+	e := timelineEvent(timelineMatch("left", 1, 1, "final"), timelineMatch("right", 2, 1, "final"), timelineMatch("final", 2, 2, ""))
+	e.Courts = 3
+	e.Settings.Schedule.Mode = "balanced"
+	e.Matches[2].Round = 2
+	selected := map[string][]int{"-54": {2, 1}}
+	if err := buildScheduleTimelineWithPlan(e, false, []string{"-54"}, selected); err != nil {
+		t.Fatal(err)
+	}
+	assertTimeline(t, e)
+	for _, match := range e.Matches {
+		if match.Court == 3 {
+			t.Fatalf("match %s escaped selected courts", match.ID)
+		}
+		if match.ID == "final" && match.Court != 2 {
+			t.Fatalf("final must use first selected court: %d", match.Court)
+		}
+	}
+}
+
+func TestTimelineRespectsHoguPairInventory(t *testing.T) {
+	e := timelineEvent(timelineMatch("a", 1, 1, ""), timelineMatch("b", 2, 1, ""))
+	e.Settings.Hogu = HoguSettings{Enabled: true, CategorySizes: map[string]string{"-54": "2"}, CourtSizes: map[int][]string{1: {"2"}, 2: {"2"}}, PairCounts: map[string]int{"2": 1}}
+	if err := buildScheduleTimelineWithPlan(e, false, nil, map[string][]int{"-54": {1, 2}}); err != nil {
+		t.Fatal(err)
+	}
+	if *e.Matches[0].ScheduledStartMinute == *e.Matches[1].ScheduledStartMinute {
+		t.Fatal("one hogu pair was scheduled on two courts at once")
+	}
+}
+
 func TestTimelineReportsUnavoidableWait(t *testing.T) {
 	e := timelineEvent(timelineMatch("first", 1, 1, "next"), timelineMatch("next", 2, 1, ""))
 	if err := buildScheduleTimeline(e, false); err != nil {
