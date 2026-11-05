@@ -188,6 +188,70 @@ func (a *API) tournamentRoutes(org *gin.RouterGroup) {
 		}
 		return r.Service().NumberMatches(r.Context(), r.C.Param("tournament"), true)
 	}))
+	group.POST("/:tournament/numbering/ai/preview", a.route(true, true, func(r *Request) (any, error) {
+		if err := r.authorizeTournament(permTournamentsManage, r.C.Param("tournament")); err != nil {
+			return nil, err
+		}
+		id := r.C.Param("tournament")
+		var input struct {
+			Courts  map[string][]int                   `json:"courts"`
+			Options tournaments.GuidedNumberingOptions `json:"options"`
+		}
+		if err := r.C.ShouldBindJSON(&input); err != nil || input.Courts == nil {
+			return nil, bad("select courts for every playable weight")
+		}
+		t, err := r.Service().GetByID(r.Context(), id)
+		if err != nil {
+			return nil, err
+		}
+		if !tournaments.CheckDrawReadiness(t).Ready {
+			return nil, httpError{409, "finish weigh-ins and draws before AI numbering"}
+		}
+		for _, match := range t.Matches {
+			if match.MovedAt != nil {
+				return nil, httpError{409, "AI numbering requires an automatic schedule; manual court positions are present"}
+			}
+		}
+		if _, err := r.Service().NumberMatchesWithPlan(r.Context(), id, true, nil, input.Courts, &input.Options); err != nil {
+			return nil, err
+		}
+		inventory := map[string]int(nil)
+		if input.Options.LimitHogu {
+			inventory = input.Options.HoguPairs
+		}
+		plan, err := suggestNumbering(r.Context(), t, input.Courts, inventory)
+		if err != nil {
+			return nil, err
+		}
+		preview, err := r.Service().NumberMatchesWithPlan(r.Context(), id, true, plan.Priority, input.Courts, &input.Options)
+		if err != nil {
+			return nil, err
+		}
+		return struct {
+			*tournaments.Tournament
+			Priority        []string                           `json:"priority"`
+			SelectedCourts  map[string][]int                   `json:"selectedCourts"`
+			SelectedOptions tournaments.GuidedNumberingOptions `json:"selectedOptions"`
+			Reason          string                             `json:"reason"`
+		}{preview, plan.Priority, input.Courts, input.Options, plan.Reason}, nil
+	}))
+	group.POST("/:tournament/numbering/ai", a.route(true, true, func(r *Request) (any, error) {
+		if err := r.authorizeTournament(permTournamentsManage, r.C.Param("tournament")); err != nil {
+			return nil, err
+		}
+		var input struct {
+			Priority []string                           `json:"priority"`
+			Courts   map[string][]int                   `json:"courts"`
+			Options  tournaments.GuidedNumberingOptions `json:"options"`
+		}
+		if err := r.C.ShouldBindJSON(&input); err != nil {
+			return nil, bad("invalid AI numbering plan")
+		}
+		if len(input.Priority) == 0 || input.Courts == nil {
+			return nil, bad("AI numbering plan is empty")
+		}
+		return r.Service().NumberMatchesWithPlan(r.Context(), r.C.Param("tournament"), false, input.Priority, input.Courts, &input.Options)
+	}))
 	group.POST("/:tournament/numbering", a.route(true, true, func(r *Request) (any, error) {
 		if err := r.authorizeTournament(permTournamentsManage, r.C.Param("tournament")); err != nil {
 			return nil, err
