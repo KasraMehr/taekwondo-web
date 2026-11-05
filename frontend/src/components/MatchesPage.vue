@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, ref, watch, onUnmounted } from 'vue'
 import draggable from 'vuedraggable'
 import { useTournamentStore } from '../stores/tournament'
 import type { Match, Tournament } from '../types'
@@ -16,6 +16,113 @@ const numberingBusy = ref(false)
 const numberingError = ref('')
 const numberingMessage = ref('')
 const numberingReadiness = ref<any | null>(null)
+const aiWorking = ref(false)
+const aiStep = ref(0)
+const aiWizardOpen = ref(false)
+const aiWizardError = ref('')
+const aiStage = ref(0)
+const aiCourtPage = ref(0)
+const aiCourtPageSize = 4
+const selectedAiCourts = ref<Record<string, number[]>>({})
+const aiOptions = ref({matchMinutes: 5, restMinutes: 10, startAt: 1, limitHogu: false, hoguPairs: {'1': 0, '2': 0, '3': 0, '4': 0} as Record<string, number>})
+const neededHoguSizes = computed(() => [...new Set(playableWeights.value.map(aiHoguSize))].sort())
+const playableWeights = computed(() => [...new Set(matches.value.filter(m => !m.isBye).map(m => m.weightCategory))].sort((a, b) => weightSortValue(a) - weightSortValue(b)))
+const aiCourtPageCount = computed(() => Math.max(1, Math.ceil(playableWeights.value.length / aiCourtPageSize)))
+const visibleAiWeights = computed(() => playableWeights.value.slice(aiCourtPage.value * aiCourtPageSize, (aiCourtPage.value + 1) * aiCourtPageSize))
+const aiHogu = computed<any>(() => (t.value as any)?.settings?.hogu ?? {})
+function aiHoguSize(category: string): string {
+  const weight = Number(category.replace(/[+-]/g, '')) + (category.startsWith('+') ? 1 : 0)
+  const old = weight <= 40 ? '1' : weight <= 55 ? '2' : weight <= 70 ? '3' : '4'
+  const age = t.value?.ageCategory
+  const proposed = age === 'خردسالان' ? (weight <= 36 ? '1' : weight <= 52 ? '2' : '3')
+    : age === 'نونهالان' ? (weight <= 41 ? '1' : weight <= 59 ? '2' : '3')
+    : age === 'نوجوانان' ? (weight <= 49 ? '2' : weight <= 68 ? '3' : '4') : old
+  const saved = aiHogu.value.categorySizes?.[category]
+  return saved && saved !== old ? saved : proposed
+}
+function courtAllowed(category: string, court: number): boolean {
+  return Boolean(court >= 1 && court <= (t.value?.courts ?? 0) && (!aiOptions.value.limitHogu || aiOptions.value.hoguPairs[aiHoguSize(category)] > 0))
+}
+function openAiWizard() {
+  if (!t.value) return
+  aiWizardError.value = ''
+  aiStage.value = 0
+  aiCourtPage.value = 0
+  numberingPreview.value = null
+  const settings = (t.value as any).settings
+  const pairs: Record<string, number> = {'1': 0, '2': 0, '3': 0, '4': 0}
+  for (const size of Object.keys(pairs)) pairs[size] = settings?.hogu?.pairCounts?.[size] ?? (settings?.hogu?.enabled ? Object.values(settings.hogu.courtSizes ?? {}).filter((sizes: any) => sizes?.includes(size)).length : 0)
+  aiOptions.value = {matchMinutes: settings?.schedule?.matchMinutes || 5, restMinutes: settings?.schedule?.restMinutes ?? 10, startAt: settings?.numbering?.startAt || 1, limitHogu: Boolean(settings?.hogu?.enabled), hoguPairs: pairs}
+  const next: Record<string, number[]> = {}
+  for (const category of playableWeights.value) {
+    const previous = (t.value.courtAssignment?.[category] ?? []).filter(court => courtAllowed(category, court)).slice(0, 2)
+    next[category] = previous.length ? previous : Array.from({length: t.value.courts}, (_, i) => i + 1).filter(court => courtAllowed(category, court)).slice(0, 1)
+  }
+  selectedAiCourts.value = next
+  aiWizardOpen.value = true
+}
+function nextAiStage() {
+  aiWizardError.value = ''
+  if (aiStage.value === 1 && aiOptions.value.limitHogu) {
+    if (Object.values(aiOptions.value.hoguPairs).some(count => !Number.isInteger(count) || count < 0 || count > 100)) {
+      aiWizardError.value = 'تعداد هر سایز هوگو باید عددی بین صفر تا ۱۰۰ باشد.'
+      return
+    }
+    if (neededHoguSizes.value.some(size => !Number.isInteger(aiOptions.value.hoguPairs[size]) || aiOptions.value.hoguPairs[size] < 1 || aiOptions.value.hoguPairs[size] > 100)) {
+      aiWizardError.value = 'برای همهٔ سایزهای موردنیاز، تعداد جفت هوگوی موجود را وارد کنید.'
+      return
+    }
+    for (const category of playableWeights.value) {
+      selectedAiCourts.value[category] = (selectedAiCourts.value[category] ?? []).filter(court => courtAllowed(category, court))
+      if (!selectedAiCourts.value[category].length) selectedAiCourts.value[category] = [1]
+    }
+  }
+  aiStage.value++
+}
+function toggleAiCourt(category: string, court: number) {
+  if (!courtAllowed(category, court)) return
+  const current = selectedAiCourts.value[category] ?? []
+  selectedAiCourts.value = {...selectedAiCourts.value, [category]: current.includes(court) ? current.filter(c => c !== court) : current.length < 2 ? [...current, court] : current}
+}
+async function confirmAiCourts() {
+  if (!Number.isInteger(aiOptions.value.matchMinutes) || aiOptions.value.matchMinutes < 1 || aiOptions.value.matchMinutes > 60 || !Number.isInteger(aiOptions.value.restMinutes) || aiOptions.value.restMinutes < 0 || aiOptions.value.restMinutes > 120 || !Number.isInteger(aiOptions.value.startAt) || aiOptions.value.startAt < 1) {
+    aiWizardError.value = 'مدت بازی باید ۱ تا ۶۰ دقیقه، استراحت ۰ تا ۱۲۰ دقیقه و شمارهٔ شروع بزرگ‌تر از صفر باشد.'
+    return
+  }
+  if (playableWeights.value.some(category => !selectedAiCourts.value[category]?.length)) {
+    aiWizardError.value = 'برای هر وزن دست‌کم یک زمین انتخاب کنید.'
+    return
+  }
+  aiStage.value = 3
+  await previewAiNumbering()
+}
+let aiTimer: ReturnType<typeof setInterval> | undefined
+const aiSteps = ['بررسی قرعه‌ها و وزن‌کشی', 'بررسی ظرفیت زمین‌ها', 'طراحی اولویت وزن‌ها', 'کنترل استراحت و مسیر براکت', 'ساخت پیش‌نمایش نهایی']
+const hasManualPositions = computed(() => matches.value.some(match => Boolean(match.movedAt)))
+onUnmounted(() => { if (aiTimer) clearInterval(aiTimer) })
+
+async function previewAiNumbering() {
+  if (!t.value || aiWorking.value || numberingBusy.value) return
+  numberingError.value = ''
+  numberingPreview.value = null
+  aiStep.value = 0
+  aiWorking.value = true
+  aiTimer = setInterval(() => { aiStep.value = Math.min(aiStep.value + 1, aiSteps.length - 1) }, 4200)
+  try {
+    const readiness = await webApi().call<any>(`/tournaments/${t.value.id}/draw-readiness`)
+    numberingReadiness.value = readiness
+    if (!readiness.ready) throw new Error('ابتدا وزن‌کشی و قرعهٔ همهٔ وزن‌ها را کامل کنید.')
+    numberingPreview.value = await webApi().call(`/tournaments/${t.value.id}/numbering/ai/preview`, 'POST', {courts: selectedAiCourts.value, options: aiOptions.value}, {revision: t.value.revision})
+    aiStage.value = 4
+  } catch (error: any) {
+    numberingError.value = error?.message || 'شماره‌گذاری هوشمند ناموفق بود'
+    aiWizardError.value = numberingError.value
+    aiStage.value = 2
+  } finally {
+    if (aiTimer) clearInterval(aiTimer)
+    aiWorking.value = false
+  }
+}
 const rebalanceBusy = ref(false)
 const rebalanceMessage = ref('')
 const rebalanceError = ref('')
@@ -93,8 +200,12 @@ async function applyNumbering() {
   numberingError.value = ''
   numberingMessage.value = ''
   try {
-    const updated = await store.applyMatchNumbering(t.value.id, numberingPreview.value?.revision)
+    const updated = numberingPreview.value?.priority
+      ? await webApi().call<Tournament>(`/tournaments/${t.value.id}/numbering/ai`, 'POST', {priority: numberingPreview.value.priority, courts: numberingPreview.value.selectedCourts, options: numberingPreview.value.selectedOptions}, {revision: numberingPreview.value.revision})
+      : await store.applyMatchNumbering(t.value.id, numberingPreview.value?.revision)
+    if (numberingPreview.value?.priority) store.replaceFromServer(updated)
     numberingPreview.value = null
+    aiWizardOpen.value = false
     numberingMessage.value = `شماره‌گذاری ${updated.matches.filter(m => !m.isBye).length} بازی ذخیره شد.`
   } catch (error: any) {
     numberingError.value = error?.message || 'ثبت شماره‌های بازی ناموفق بود'
@@ -185,6 +296,15 @@ function athleteDisplayName(id: string | null, matchId: string, slot: 1 | 2): st
     return 'در انتظار حریف'
   }
   return t.value?.athletes.find(a => a.id === id)?.name ?? '؟'
+}
+
+function previewParticipantName(match: Match, slot: 1 | 2): string {
+  const athleteId = slot === 1 ? match.athlete1Id : match.athlete2Id
+  if (athleteId) return t.value?.athletes.find(a => a.id === athleteId)?.name ?? 'نام ورزشکار نامشخص'
+  const feeder = (numberingPreview.value?.matches as Match[] | undefined)?.find(m =>
+    m.nextMatchId === match.id && m.nextSlot === (slot === 1 ? 'athlete1' : 'athlete2')
+  )
+  return feeder?.matchNumber ? `برندهٔ بازی ${courtLabel(feeder.court)}${feeder.matchNumber}` : 'در انتظار تعیین حریف'
 }
 
 function matchLabel(match: Match): string {
@@ -363,7 +483,7 @@ async function doTextSwap() {
     ابتدا قرعه‌کشی را انجام دهید.
   </div>
 
-  <div v-else class="p-4 flex flex-col gap-4 max-w-5xl mx-auto">
+  <div v-else class="mx-auto flex w-full max-w-[1600px] flex-col gap-5 px-4 py-6 lg:px-8">
 
     <!-- تب‌ها -->
     <div class="flex bg-slate-100 rounded-full p-0.5 w-fit self-center gap-0.5">
@@ -378,6 +498,118 @@ async function doTextSwap() {
           @click="activeTab = 'schedule'"
       >زمان‌بندی زمین‌ها</button>
     </div>
+
+    <section class="overflow-hidden rounded-[1.75rem] border border-blue-200 bg-white shadow-lg shadow-blue-900/5" style="overflow-anchor: none">
+      <div class="relative overflow-hidden bg-gradient-to-l from-slate-950 via-blue-950 to-sky-800 p-6 text-white sm:p-8">
+        <div class="pointer-events-none absolute -left-10 -top-16 h-52 w-52 rounded-full bg-cyan-400/20 blur-3xl"></div>
+        <div class="pointer-events-none absolute -bottom-24 right-1/3 h-48 w-48 rounded-full bg-blue-400/20 blur-3xl"></div>
+        <div class="relative flex flex-wrap items-center justify-between gap-6">
+          <div class="max-w-2xl">
+            <div class="mb-3 inline-flex items-center gap-2 rounded-full border border-cyan-300/30 bg-cyan-300/10 px-3 py-1 text-xs font-black text-cyan-100"><span class="text-base">✦</span> دستیار شماره‌گذاری</div>
+            <h2 class="text-2xl font-black leading-tight sm:text-3xl">برنامهٔ مسابقه را با هم می‌چینیم</h2>
+            <p class="mt-3 text-sm leading-7 text-sky-100">موجودی هوگو و زمین هر وزن را مشخص کنید؛ پیش از ثبت، همهٔ شماره‌ها و حریف‌ها را می‌بینید.</p>
+          </div>
+          <button v-if="!aiWizardOpen" :disabled="numberingBusy||rebalanceBusy||scheduleBusy||hasManualPositions||!numberingReadiness?.ready" class="group inline-flex min-h-12 items-center gap-3 rounded-2xl bg-gradient-to-l from-cyan-400 to-sky-300 px-6 py-3 text-sm font-black text-slate-950 shadow-lg shadow-cyan-950/20 transition hover:-translate-y-0.5 hover:from-cyan-300 hover:to-white disabled:cursor-not-allowed disabled:opacity-50" @click="openAiWizard"><span>شروع شماره‌گذاری هوشمند</span><span class="text-lg transition group-hover:-translate-x-1">←</span></button>
+        </div>
+        <div v-if="!aiWizardOpen" class="relative mt-6 flex flex-wrap gap-2 text-xs font-bold text-sky-100">
+          <span class="rounded-full border border-white/20 bg-white/10 px-3 py-1.5">{{playableWeights.length}} وزن</span>
+          <span class="rounded-full border border-white/20 bg-white/10 px-3 py-1.5">{{matches.filter(m=>!m.isBye).length}} بازی</span>
+          <span class="rounded-full border border-white/20 bg-white/10 px-3 py-1.5">{{t?.courts??0}} زمین</span>
+        </div>
+        <p v-if="hasManualPositions" class="relative mt-4 rounded-xl border border-amber-300/30 bg-amber-400/10 px-4 py-2 text-xs font-bold text-amber-100">برای شروع، ابتدا چیدمان دستی را با «توزیع مجدد بازی‌ها» بازسازی کنید.</p>
+        <p v-else-if="!numberingReadiness?.ready" class="relative mt-4 rounded-xl border border-amber-300/30 bg-amber-400/10 px-4 py-2 text-xs font-bold text-amber-100">راهنما پس از تکمیل وزن‌کشی و قرعهٔ همهٔ وزن‌ها فعال می‌شود.</p>
+      </div>
+      <div v-if="aiWizardOpen" class="min-h-[38rem] bg-gradient-to-b from-sky-50/80 via-white to-slate-50 p-4 sm:p-7">
+        <div class="grid grid-cols-4 gap-1.5 rounded-2xl border border-slate-200 bg-white p-2 shadow-sm sm:gap-2 sm:p-3">
+          <div v-for="(label, index) in ['شروع','موجودی هوگو','زمین وزن‌ها','بازبینی']" :key="label" class="flex min-w-0 flex-col items-center gap-1 rounded-xl px-1 py-2 text-center text-[10px] font-black sm:flex-row sm:justify-center sm:gap-2 sm:text-xs" :class="index === Math.min(aiStage,3) ? 'bg-blue-600 text-white shadow-sm' : index < aiStage ? 'bg-sky-50 text-blue-700' : 'text-slate-400'">
+            <span class="grid h-6 w-6 shrink-0 place-items-center rounded-full text-xs" :class="index === Math.min(aiStage,3) ? 'bg-white/20' : index < aiStage ? 'bg-blue-100 text-blue-700' : 'bg-slate-100 text-slate-400'">{{index < aiStage ? '✓' : index + 1}}</span><span class="truncate">{{label}}</span>
+          </div>
+        </div>
+
+        <div v-if="aiStage === 0" class="mt-5 grid gap-5 lg:grid-cols-[1.35fr_1fr]">
+          <div class="flex flex-col justify-between rounded-3xl border border-sky-200 bg-gradient-to-br from-white via-sky-50 to-cyan-50 p-6 shadow-sm sm:p-8">
+            <div><div class="mb-4 grid h-14 w-14 place-items-center rounded-2xl bg-blue-600 text-2xl text-white shadow-lg shadow-blue-600/20">✦</div><h3 class="text-2xl font-black text-slate-900">چند انتخاب ساده، یک برنامهٔ آماده</h3><p class="mt-3 max-w-xl text-sm leading-8 text-slate-600">در گام بعد، موجودی هوگو را می‌پرسیم. سپس برای هر وزن زمین دلخواه را انتخاب می‌کنید؛ هر وزن می‌تواند روی دو زمین باشد. نتیجه را قبل از ذخیره بررسی خواهید کرد.</p></div>
+            <button class="mt-8 inline-flex min-h-12 w-fit items-center gap-3 rounded-xl bg-blue-600 px-6 py-3 text-sm font-black text-white shadow-sm transition hover:bg-blue-700" @click="nextAiStage">شروع تنظیمات <span>←</span></button>
+          </div>
+          <div class="grid grid-cols-2 gap-3">
+            <div class="rounded-2xl border border-blue-100 bg-white p-5 shadow-sm"><div class="text-3xl font-black text-blue-700">{{playableWeights.length}}</div><div class="mt-2 text-sm font-bold text-slate-600">وزن مسابقه</div></div>
+            <div class="rounded-2xl border border-cyan-100 bg-white p-5 shadow-sm"><div class="text-3xl font-black text-cyan-700">{{matches.filter(m=>!m.isBye).length}}</div><div class="mt-2 text-sm font-bold text-slate-600">بازی قابل اجرا</div></div>
+            <div class="col-span-2 rounded-2xl border border-indigo-100 bg-gradient-to-l from-indigo-50 to-white p-5 shadow-sm"><div class="text-3xl font-black text-indigo-700">{{t?.courts??0}}</div><div class="mt-2 text-sm font-bold text-slate-600">زمین برای برنامه‌ریزی</div><p class="mt-3 text-xs leading-6 text-slate-500">زمین‌های انتخابی شما در شماره‌گذاری رعایت می‌شوند.</p></div>
+          </div>
+        </div>
+
+        <div v-else-if="aiStage === 1" class="mt-5">
+          <div class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6"><div class="flex items-start gap-3"><div class="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-cyan-100 text-xl text-cyan-700">◈</div><div><h3 class="text-xl font-black text-slate-900">موجودی هوگو را مشخص کنید</h3><p class="mt-2 text-sm leading-7 text-slate-600">اگر تعداد هوگو محدود است، بازی‌های هم‌زمان متناسب با موجودی شما چیده می‌شوند.</p></div></div></div>
+          <label class="mt-4 flex cursor-pointer items-center gap-4 rounded-2xl border p-4 shadow-sm transition sm:p-5" :class="aiOptions.limitHogu ? 'border-blue-400 bg-blue-50' : 'border-slate-200 bg-white hover:border-blue-200'"><input v-model="aiOptions.limitHogu" type="checkbox" class="h-5 w-5 shrink-0 accent-blue-600"><span class="flex-1"><b class="block text-sm text-slate-900">محدودیت تعداد هوگو دارم</b><span class="mt-1 block text-xs leading-6 text-slate-500">با فعال کردن این گزینه، تعداد جفت هوگوی هر سایز را وارد می‌کنید.</span></span><span class="rounded-full px-3 py-1 text-xs font-black" :class="aiOptions.limitHogu ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-500'">{{aiOptions.limitHogu ? 'فعال' : 'اختیاری'}}</span></label>
+          <div v-if="aiOptions.limitHogu" class="mt-4 rounded-2xl border border-blue-100 bg-white p-4 shadow-sm sm:p-5"><div class="mb-4 text-sm font-black text-slate-800">از هر سایز چند جفت دارید؟</div><div class="grid grid-cols-2 gap-3 sm:grid-cols-4"><label v-for="size in ['1','2','3','4']" :key="size" class="rounded-xl border p-4 text-sm font-bold text-slate-700" :class="neededHoguSizes.includes(size) ? 'border-blue-200 bg-blue-50/50' : 'border-slate-200 bg-slate-50'">سایز {{size}}<span v-if="neededHoguSizes.includes(size)" class="mr-1 text-[10px] text-blue-700">موردنیاز</span><input v-model.number="aiOptions.hoguPairs[size]" type="number" min="0" max="100" class="mt-3 block w-full rounded-lg border border-slate-300 bg-white p-2.5 text-lg font-black text-slate-900 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"></label></div><p class="mt-3 text-xs leading-6 text-slate-500">سایز پیشنهادی هر وزن از ردهٔ سنی و وزن محاسبه می‌شود.</p></div>
+          <div class="mt-6 flex flex-wrap items-center justify-between gap-3"><button class="rounded-xl border border-slate-200 bg-white px-5 py-2.5 text-sm font-bold text-slate-600 hover:bg-slate-50" @click="aiStage=0">بازگشت</button><button class="rounded-xl bg-blue-600 px-6 py-3 text-sm font-black text-white shadow-sm hover:bg-blue-700" @click="nextAiStage">ادامه به انتخاب زمین ←</button></div>
+        </div>
+
+        <div v-else-if="aiStage === 2" class="mt-5">
+          <div class="flex flex-wrap items-start justify-between gap-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6"><div><div class="mb-2 text-xs font-black text-blue-700">گام ۳ از ۴</div><h3 class="text-xl font-black text-slate-900">زمین هر وزن را انتخاب کنید</h3><p class="mt-2 max-w-2xl text-sm leading-7 text-slate-600">برای هر وزن یک یا دو زمین بزنید. اولین زمین انتخابی محل فینال است؛ انتخاب‌هایتان هنگام ورق زدن حفظ می‌شود.</p></div><span class="rounded-full bg-blue-50 px-4 py-2 text-xs font-black text-blue-700">{{aiCourtPage + 1}} از {{aiCourtPageCount}} · {{playableWeights.length}} وزن</span></div>
+          <div class="mt-4 grid gap-3 lg:grid-cols-2">
+            <div v-for="(category, index) in visibleAiWeights" :key="category" class="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm transition hover:border-blue-300 sm:p-5">
+              <div class="mb-4 flex items-start justify-between gap-3"><div><div class="text-[10px] font-black tracking-wide text-blue-600">وزن {{aiCourtPage * aiCourtPageSize + index + 1}} از {{playableWeights.length}}</div><h4 class="mt-1 text-xl font-black text-slate-900">{{category}}</h4></div><div class="rounded-xl bg-sky-50 px-3 py-2 text-left text-xs font-bold text-sky-800">{{matches.filter(m=>!m.isBye&&m.weightCategory===category).length}} بازی<br>هوگو {{aiHoguSize(category)}}</div></div>
+              <div class="mb-2 text-xs font-bold text-slate-500">زمین‌های این وزن</div>
+              <div class="grid grid-cols-2 gap-2 sm:grid-cols-4"><button v-for="court in Array.from({length:t?.courts??0},(_,i)=>i+1)" :key="court" :disabled="!courtAllowed(category,court)" class="min-h-11 rounded-xl border px-2 py-2 text-xs font-black transition disabled:cursor-not-allowed disabled:opacity-30" :class="(selectedAiCourts[category]??[]).includes(court) ? 'border-blue-600 bg-blue-600 text-white shadow-sm' : 'border-slate-200 bg-slate-50 text-slate-700 hover:border-blue-400 hover:bg-blue-50'" @click="toggleAiCourt(category,court)">زمین {{courtLabel(court)}}<span v-if="selectedAiCourts[category]?.[0]===court" class="block text-[10px] opacity-80">فینال</span></button></div>
+              <p class="mt-3 text-[11px] font-bold" :class="selectedAiCourts[category]?.length ? 'text-emerald-700' : 'text-rose-600'">{{selectedAiCourts[category]?.length ? `${selectedAiCourts[category].length} زمین انتخاب شده` : 'لطفاً یک زمین انتخاب کنید'}}</p>
+            </div>
+          </div>
+          <div v-if="aiCourtPageCount > 1" class="mt-4 flex items-center justify-between rounded-2xl border border-blue-100 bg-blue-50 px-4 py-3"><button :disabled="aiCourtPage===0" class="rounded-lg bg-white px-4 py-2 text-xs font-black text-blue-700 shadow-sm disabled:opacity-40" @click="aiCourtPage--">صفحهٔ قبل</button><div class="flex gap-1.5"><span v-for="page in aiCourtPageCount" :key="page" class="h-2 rounded-full transition-all" :class="page-1===aiCourtPage ? 'w-6 bg-blue-600' : 'w-2 bg-blue-200'"></span></div><button :disabled="aiCourtPage>=aiCourtPageCount-1" class="rounded-lg bg-white px-4 py-2 text-xs font-black text-blue-700 shadow-sm disabled:opacity-40" @click="aiCourtPage++">صفحهٔ بعد</button></div>
+          <details class="mt-4 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm"><summary class="cursor-pointer text-sm font-black text-slate-700">تنظیمات بیشتر <span class="text-xs font-medium text-slate-400">· مدت بازی، استراحت و شمارهٔ شروع</span></summary><div class="mt-4 grid gap-3 sm:grid-cols-3"><label class="text-xs font-bold text-slate-600">مدت بازی (دقیقه)<input v-model.number="aiOptions.matchMinutes" type="number" min="1" max="60" class="mt-1 block w-full rounded-lg border border-slate-300 p-2.5 text-base outline-none focus:border-blue-500"></label><label class="text-xs font-bold text-slate-600">استراحت (دقیقه)<input v-model.number="aiOptions.restMinutes" type="number" min="0" max="120" class="mt-1 block w-full rounded-lg border border-slate-300 p-2.5 text-base outline-none focus:border-blue-500"></label><label class="text-xs font-bold text-slate-600">شمارهٔ شروع<input v-model.number="aiOptions.startAt" type="number" min="1" class="mt-1 block w-full rounded-lg border border-slate-300 p-2.5 text-base outline-none focus:border-blue-500"></label></div></details>
+          <div class="mt-6 flex flex-wrap items-center justify-between gap-3"><button class="rounded-xl border border-slate-200 bg-white px-5 py-2.5 text-sm font-bold text-slate-600 hover:bg-slate-50" @click="aiStage=1">بازگشت</button><button class="rounded-xl bg-gradient-to-l from-blue-700 to-sky-600 px-6 py-3 text-sm font-black text-white shadow-sm hover:from-blue-800 hover:to-sky-700" @click="confirmAiCourts">ساخت پیش‌نمایش ✦</button></div>
+        </div>
+
+        <div v-else-if="aiStage === 3" class="mt-5 flex min-h-[30rem] flex-col items-center justify-center rounded-3xl border border-sky-200 bg-gradient-to-b from-sky-100 via-white to-white p-8 text-center text-slate-900"><div class="grid h-20 w-20 animate-pulse place-items-center rounded-3xl bg-gradient-to-br from-blue-700 to-cyan-400 text-4xl text-white shadow-lg shadow-blue-600/20">✦</div><h3 class="mt-5 text-xl font-black">در حال طراحی برنامهٔ بازی‌ها</h3><p class="mt-2 text-sm text-blue-700">{{aiSteps[aiStep]}}…</p><div class="mt-6 flex flex-wrap justify-center gap-2"><span v-for="(_, index) in aiSteps" :key="index" class="h-2 rounded-full transition-all" :class="index<=aiStep ? 'w-9 bg-blue-600' : 'w-5 bg-slate-200'"></span></div><p class="mt-5 text-xs text-slate-500">پیش‌نمایش را پیش از ثبت نهایی خواهید دید.</p></div>
+        <div v-else-if="aiStage === 4 && numberingPreview" class="mt-7">
+          <div class="relative overflow-hidden rounded-2xl bg-gradient-to-l from-slate-900 via-blue-900 to-sky-800 p-6 text-white shadow-lg shadow-blue-900/15 sm:p-7">
+            <div class="pointer-events-none absolute -left-8 -top-12 h-40 w-40 rounded-full bg-cyan-300/20 blur-2xl"></div>
+            <div class="relative flex flex-wrap items-center justify-between gap-4">
+              <div>
+                <div class="text-xs font-black tracking-wider text-cyan-200">✦ پیش‌نمایش شماره‌گذاری</div>
+                <h3 class="mt-2 text-xl font-black sm:text-2xl">برنامهٔ بازی‌ها آماده است</h3>
+                <p class="mt-2 text-sm text-sky-100">{{numberingPreview.matches.filter((m: Match) => !m.isBye).length}} بازی در {{numberingCourts.length}} زمین؛ نام حریف‌ها را پیش از ثبت بررسی کنید.</p>
+              </div>
+              <div class="rounded-2xl border border-white/20 bg-white/10 px-4 py-3 text-center backdrop-blur-sm">
+                <div class="text-2xl font-black">{{numberingPreview.matches.filter((m: Match) => !m.isBye).length}}</div>
+                <div class="text-xs text-sky-100">بازی آماده</div>
+              </div>
+            </div>
+          </div>
+          <p v-if="numberingPreview.reason" class="mt-4 rounded-xl border border-sky-100 bg-sky-50 px-4 py-3 text-sm text-sky-900">{{numberingPreview.reason}}</p>
+          <div class="mt-5 grid gap-4 lg:grid-cols-2 xl:grid-cols-4">
+            <article v-for="court in numberingCourts" :key="court.court" class="min-w-0 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+              <div class="flex items-center justify-between bg-gradient-to-l px-4 py-4 text-white" :class="court.court % 4 === 1 ? 'from-blue-700 to-sky-500' : court.court % 4 === 2 ? 'from-cyan-700 to-teal-500' : court.court % 4 === 3 ? 'from-violet-700 to-indigo-500' : 'from-orange-600 to-amber-500'">
+                <h4 class="text-lg font-black">زمین {{courtLabel(court.court)}}</h4>
+                <span class="rounded-full bg-white/20 px-3 py-1 text-xs font-bold">{{court.matches.length}} بازی</span>
+              </div>
+              <ol class="space-y-2 bg-slate-50/70 p-3">
+                <li v-for="match in court.matches" :key="match.id" class="rounded-xl border border-slate-200 bg-white p-3 shadow-sm">
+                  <div class="mb-3 flex items-center justify-between gap-2">
+                    <b class="rounded-lg bg-blue-50 px-2.5 py-1 text-sm text-blue-800">بازی {{courtLabel(court.court)}}{{match.matchNumber}}</b>
+                    <span class="text-xs font-bold text-slate-500">وزن {{match.weightCategory}}</span>
+                  </div>
+                  <div class="space-y-2 text-sm font-bold text-slate-800">
+                    <div class="flex min-w-0 items-center gap-2"><span class="h-2.5 w-2.5 shrink-0 rounded-full bg-blue-500"></span><span class="min-w-0 truncate" :title="previewParticipantName(match, 1)">{{previewParticipantName(match, 1)}}</span></div>
+                    <div class="flex min-w-0 items-center gap-2"><span class="h-2.5 w-2.5 shrink-0 rounded-full bg-rose-500"></span><span class="min-w-0 truncate" :title="previewParticipantName(match, 2)">{{previewParticipantName(match, 2)}}</span></div>
+                  </div>
+                </li>
+                <li v-if="!court.matches.length" class="rounded-xl border border-dashed border-slate-200 bg-white p-5 text-center text-sm text-slate-500">هنوز بازی‌ای برای این زمین نیست.</li>
+              </ol>
+            </article>
+          </div>
+          <div class="mt-6 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white p-4">
+            <span class="text-xs font-bold text-slate-500">تا زمان تأیید، شماره‌ها ذخیره نمی‌شوند.</span>
+            <div class="flex flex-wrap gap-2">
+              <button class="rounded-xl border border-slate-200 px-5 py-2 text-sm font-bold text-slate-700 hover:bg-slate-50" @click="aiStage=2">اصلاح زمین‌ها</button>
+              <button :disabled="numberingBusy" class="rounded-xl bg-emerald-600 px-7 py-3 text-sm font-black text-white shadow-sm transition hover:bg-emerald-700 disabled:opacity-50" @click="applyNumbering">{{numberingBusy?'در حال ذخیره…':'تأیید و ثبت شماره‌ها'}}</button>
+            </div>
+          </div>
+        </div>
+        <p v-if="aiWizardError" role="alert" class="mt-5 rounded-xl bg-rose-50 p-3 text-sm font-bold text-rose-700">{{aiWizardError}}</p>
+        <button v-if="aiStage !== 3" class="mt-5 text-xs font-bold text-slate-400 hover:text-slate-700" @click="aiWizardOpen=false;numberingPreview=null">بستن راهنما</button>
+      </div>
+    </section>
 
     <div class="rounded-2xl border border-sky-200 bg-sky-50 p-4 shadow-sm">
       <div class="flex flex-wrap items-center gap-3">
@@ -411,17 +643,14 @@ async function doTextSwap() {
     <template v-if="activeTab === 'categories'">
 
       <!-- بار هر زمین -->
-      <div
-          class="grid gap-3"
-          :style="`grid-template-columns: repeat(${courtLoads.length}, minmax(0,1fr))`"
-      >
+      <div class="grid grid-cols-2 gap-4 xl:grid-cols-4">
         <div
             v-for="cl in courtLoads"
             :key="cl.court"
-            class="bg-slate-800 text-white rounded-xl p-3 text-center"
+            class="rounded-2xl bg-slate-800 p-5 text-center text-white shadow-lg"
         >
           <div class="text-xs text-slate-400 mb-1">زمین {{ courtLabel(cl.court) }}</div>
-          <div class="text-2xl font-bold">{{ cl.total }}</div>
+          <div class="text-4xl font-black">{{ cl.total }}</div>
           <div class="text-xs text-slate-400">بازی · {{ cl.done }} انجام شده</div>
           <div class="mt-2 h-1.5 bg-slate-600 rounded-full overflow-hidden">
             <div
@@ -744,11 +973,11 @@ async function doTextSwap() {
 
   </div>
 
-  <div v-if="numberingPreview" class="fixed inset-0 z-[70] grid place-items-center bg-slate-950/50 p-4" @click.self="numberingPreview=null">
+  <div v-if="numberingPreview && !aiWizardOpen" class="fixed inset-0 z-[70] grid place-items-center bg-slate-950/50 p-4" @click.self="numberingPreview=null">
     <section class="max-h-[90vh] w-full max-w-4xl overflow-auto rounded-2xl bg-white p-5 shadow-2xl" dir="rtl">
-      <div class="flex items-start justify-between gap-3"><div><h3 class="text-lg font-black text-slate-900">پیش‌نمایش صف و شمارهٔ زمین‌ها</h3><p class="mt-1 text-sm text-slate-500">این پیش‌نمایش هنوز ذخیره نشده است؛ برای ثبت دکمهٔ «تأیید و ثبت شماره‌ها» را بزنید. زمان‌ها از شروع هر روز و به‌صورت تخمینی هستند. بازی‌های آماده فاصلهٔ استراحت را پر می‌کنند؛ انتظار باقی‌مانده مشخص می‌شود. ترتیب دستی حفظ می‌شود.</p></div><button class="rounded-lg px-3 py-1 text-slate-500 hover:bg-slate-100" @click="numberingPreview=null">بستن</button></div>
+      <div class="flex items-start justify-between gap-3"><div><h3 class="text-lg font-black text-slate-900">پیش‌نمایش صف و شمارهٔ زمین‌ها</h3><p class="mt-1 text-sm text-slate-500">این پیش‌نمایش هنوز ذخیره نشده است؛ برای ثبت دکمهٔ «تأیید و ثبت شماره‌ها» را بزنید. زمان‌ها از شروع هر روز و به‌صورت تخمینی هستند. بازی‌های آماده فاصلهٔ استراحت را پر می‌کنند؛ انتظار باقی‌مانده مشخص می‌شود. ترتیب دستی حفظ می‌شود.</p><p v-if="numberingPreview.reason" class="mt-2 rounded-lg bg-violet-50 p-2 text-sm font-bold text-violet-800">✦ {{numberingPreview.reason}}</p></div><button class="rounded-lg px-3 py-1 text-slate-500 hover:bg-slate-100" @click="numberingPreview=null">بستن</button></div>
       <div class="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-        <article v-for="court in numberingCourts" :key="court.court" class="rounded-xl border border-slate-200 p-3"><h4 class="mb-2 font-bold">زمین {{courtLabel(court.court)}}</h4><ol class="space-y-1 text-xs"><li v-for="(match, index) in court.matches" :key="match.id" class="border-b border-slate-100 py-1"><div v-if="scheduleWait(match) > 0" class="mb-1 rounded bg-amber-50 px-2 py-1 font-bold text-amber-800">انتظار برنامه‌ریزی‌شده: {{scheduleWait(match)}} دقیقه</div><div v-if="index === 0 || court.matches[index - 1].weightCategory !== match.weightCategory || court.matches[index - 1].day !== match.day" class="mb-1 rounded bg-indigo-50 px-2 py-1 font-bold text-indigo-800">روز {{match.day ?? 1}} · وزن {{match.weightCategory}}</div><div class="flex gap-2"><b class="shrink-0">{{courtLabel(court.court)}}{{match.matchNumber}}</b><span class="text-slate-500">دقیقه {{match.scheduledStartMinute}} تا {{match.scheduledEndMinute}}</span><span>{{athleteDisplayName(match.athlete1Id,match.id,1)}} / {{athleteDisplayName(match.athlete2Id,match.id,2)}}</span></div></li></ol><p v-if="!court.matches.length" class="text-xs text-slate-400">بازی ندارد</p></article>
+        <article v-for="court in numberingCourts" :key="court.court" class="rounded-xl border border-slate-200 p-3"><h4 class="mb-2 font-bold">زمین {{courtLabel(court.court)}}</h4><ol class="space-y-1 text-xs"><li v-for="(match, index) in court.matches" :key="match.id" class="border-b border-slate-100 py-1"><div v-if="scheduleWait(match) > 0" class="mb-1 rounded bg-amber-50 px-2 py-1 font-bold text-amber-800">انتظار برنامه‌ریزی‌شده: {{scheduleWait(match)}} دقیقه</div><div v-if="index === 0 || court.matches[index - 1].weightCategory !== match.weightCategory" class="mb-1 rounded bg-indigo-50 px-2 py-1 font-bold text-indigo-800">وزن {{match.weightCategory}}</div><div class="flex gap-2"><b class="shrink-0">{{courtLabel(court.court)}}{{match.matchNumber}}</b><span class="text-slate-500">دقیقه {{match.scheduledStartMinute}} تا {{match.scheduledEndMinute}}</span><span>{{athleteDisplayName(match.athlete1Id,match.id,1)}} / {{athleteDisplayName(match.athlete2Id,match.id,2)}}</span></div></li></ol><p v-if="!court.matches.length" class="text-xs text-slate-400">بازی ندارد</p></article>
       </div>
       <p v-if="numberingError" class="mt-3 rounded-lg bg-rose-50 p-3 text-sm text-rose-700">{{numberingError}}</p>
       <div class="sticky bottom-0 mt-5 flex justify-end gap-2 border-t bg-white py-3"><button :disabled="numberingBusy" class="rounded-lg border px-4 py-2 text-sm" @click="numberingPreview=null">لغو</button><button :disabled="numberingBusy" class="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-bold text-white disabled:opacity-50" @click="applyNumbering">{{numberingBusy?'در حال ثبت…':'تأیید و ثبت شماره‌ها'}}</button></div>
