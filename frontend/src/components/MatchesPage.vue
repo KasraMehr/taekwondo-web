@@ -4,6 +4,7 @@ import draggable from 'vuedraggable'
 import { useTournamentStore } from '../stores/tournament'
 import type { Match, Tournament } from '../types'
 import { webApi } from '../webApi'
+import { suggestHoguCourts } from '../utils/hoguCourtSuggestion'
 
 const store = useTournamentStore()
 const t = computed(() => store.currentTournament)
@@ -24,6 +25,8 @@ const aiStage = ref(0)
 const aiCourtPage = ref(0)
 const aiCourtPageSize = 4
 const selectedAiCourts = ref<Record<string, number[]>>({})
+const aiCourtsSuggested = ref(false)
+const aiSuggestedInventory = ref('')
 const aiOptions = ref({matchMinutes: 5, restMinutes: 10, startAt: 1, limitHogu: false, hoguPairs: {'1': 0, '2': 0, '3': 0, '4': 0} as Record<string, number>})
 const neededHoguSizes = computed(() => [...new Set(playableWeights.value.map(aiHoguSize))].sort())
 const playableWeights = computed(() => [...new Set(matches.value.filter(m => !m.isBye).map(m => m.weightCategory))].sort((a, b) => weightSortValue(a) - weightSortValue(b)))
@@ -48,6 +51,8 @@ function openAiWizard() {
   aiWizardError.value = ''
   aiStage.value = 0
   aiCourtPage.value = 0
+  aiCourtsSuggested.value = false
+  aiSuggestedInventory.value = ''
   numberingPreview.value = null
   const settings = (t.value as any).settings
   const pairs: Record<string, number> = {'1': 0, '2': 0, '3': 0, '4': 0}
@@ -61,6 +66,21 @@ function openAiWizard() {
   selectedAiCourts.value = next
   aiWizardOpen.value = true
 }
+function suggestAiCourts() {
+  selectedAiCourts.value = suggestHoguCourts(
+    playableWeights.value.map(category => ({
+      category,
+      size: aiHoguSize(category),
+      matches: matches.value.filter(match => !match.isBye && match.weightCategory === category).length,
+    })),
+    t.value?.courts ?? 0,
+    aiOptions.value.hoguPairs,
+    aiOptions.value.limitHogu,
+  )
+  aiCourtsSuggested.value = true
+  aiSuggestedInventory.value = JSON.stringify([aiOptions.value.limitHogu, aiOptions.value.hoguPairs])
+  aiCourtPage.value = 0
+}
 function nextAiStage() {
   aiWizardError.value = ''
   if (aiStage.value === 1 && aiOptions.value.limitHogu) {
@@ -72,17 +92,15 @@ function nextAiStage() {
       aiWizardError.value = 'برای همهٔ سایزهای موردنیاز، تعداد جفت هوگوی موجود را وارد کنید.'
       return
     }
-    for (const category of playableWeights.value) {
-      selectedAiCourts.value[category] = (selectedAiCourts.value[category] ?? []).filter(court => courtAllowed(category, court))
-      if (!selectedAiCourts.value[category].length) selectedAiCourts.value[category] = [1]
-    }
   }
+  if (aiStage.value === 1 && aiSuggestedInventory.value !== JSON.stringify([aiOptions.value.limitHogu, aiOptions.value.hoguPairs])) suggestAiCourts()
   aiStage.value++
 }
 function toggleAiCourt(category: string, court: number) {
   if (!courtAllowed(category, court)) return
   const current = selectedAiCourts.value[category] ?? []
   selectedAiCourts.value = {...selectedAiCourts.value, [category]: current.includes(court) ? current.filter(c => c !== court) : current.length < 2 ? [...current, court] : current}
+  aiCourtsSuggested.value = false
 }
 async function confirmAiCourts() {
   if (!Number.isInteger(aiOptions.value.matchMinutes) || aiOptions.value.matchMinutes < 1 || aiOptions.value.matchMinutes > 60 || !Number.isInteger(aiOptions.value.restMinutes) || aiOptions.value.restMinutes < 0 || aiOptions.value.restMinutes > 120 || !Number.isInteger(aiOptions.value.startAt) || aiOptions.value.startAt < 1) {
@@ -507,7 +525,7 @@ async function doTextSwap() {
           <div class="max-w-2xl">
             <div class="mb-3 inline-flex items-center gap-2 rounded-full border border-cyan-300/30 bg-cyan-300/10 px-3 py-1 text-xs font-black text-cyan-100"><span class="text-base">✦</span> دستیار شماره‌گذاری</div>
             <h2 class="text-2xl font-black leading-tight sm:text-3xl">برنامهٔ مسابقه را با هم می‌چینیم</h2>
-            <p class="mt-3 text-sm leading-7 text-sky-100">موجودی هوگو و زمین هر وزن را مشخص کنید؛ پیش از ثبت، همهٔ شماره‌ها و حریف‌ها را می‌بینید.</p>
+            <p class="mt-3 text-sm leading-7 text-sky-100">تعداد هوگوها را وارد کنید؛ زمین هر وزن را پیشنهاد می‌دهیم و پیش از ثبت، همهٔ شماره‌ها و حریف‌ها را می‌بینید.</p>
           </div>
           <button v-if="!aiWizardOpen" :disabled="numberingBusy||rebalanceBusy||scheduleBusy||hasManualPositions||!numberingReadiness?.ready" class="group inline-flex min-h-12 items-center gap-3 rounded-2xl bg-gradient-to-l from-cyan-400 to-sky-300 px-6 py-3 text-sm font-black text-slate-950 shadow-lg shadow-cyan-950/20 transition hover:-translate-y-0.5 hover:from-cyan-300 hover:to-white disabled:cursor-not-allowed disabled:opacity-50" @click="openAiWizard"><span>شروع شماره‌گذاری هوشمند</span><span class="text-lg transition group-hover:-translate-x-1">←</span></button>
         </div>
@@ -528,7 +546,7 @@ async function doTextSwap() {
 
         <div v-if="aiStage === 0" class="mt-5 grid gap-5 lg:grid-cols-[1.35fr_1fr]">
           <div class="flex flex-col justify-between rounded-3xl border border-sky-200 bg-gradient-to-br from-white via-sky-50 to-cyan-50 p-6 shadow-sm sm:p-8">
-            <div><div class="mb-4 grid h-14 w-14 place-items-center rounded-2xl bg-blue-600 text-2xl text-white shadow-lg shadow-blue-600/20">✦</div><h3 class="text-2xl font-black text-slate-900">چند انتخاب ساده، یک برنامهٔ آماده</h3><p class="mt-3 max-w-xl text-sm leading-8 text-slate-600">در گام بعد، موجودی هوگو را می‌پرسیم. سپس برای هر وزن زمین دلخواه را انتخاب می‌کنید؛ هر وزن می‌تواند روی دو زمین باشد. نتیجه را قبل از ذخیره بررسی خواهید کرد.</p></div>
+            <div><div class="mb-4 grid h-14 w-14 place-items-center rounded-2xl bg-blue-600 text-2xl text-white shadow-lg shadow-blue-600/20">✦</div><h3 class="text-2xl font-black text-slate-900">چند انتخاب ساده، یک برنامهٔ آماده</h3><p class="mt-3 max-w-xl text-sm leading-8 text-slate-600">تعداد جفت هوگوهای هر سایز را وارد کنید تا زمین وزن‌ها خودکار پیشنهاد شود. اگر خواستید، پیشنهاد را تغییر دهید؛ هر وزن می‌تواند روی دو زمین باشد. نتیجه را قبل از ذخیره بررسی خواهید کرد.</p></div>
             <button class="mt-8 inline-flex min-h-12 w-fit items-center gap-3 rounded-xl bg-blue-600 px-6 py-3 text-sm font-black text-white shadow-sm transition hover:bg-blue-700" @click="nextAiStage">شروع تنظیمات <span>←</span></button>
           </div>
           <div class="grid grid-cols-2 gap-3">
@@ -542,11 +560,12 @@ async function doTextSwap() {
           <div class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6"><div class="flex items-start gap-3"><div class="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-cyan-100 text-xl text-cyan-700">◈</div><div><h3 class="text-xl font-black text-slate-900">موجودی هوگو را مشخص کنید</h3><p class="mt-2 text-sm leading-7 text-slate-600">اگر تعداد هوگو محدود است، بازی‌های هم‌زمان متناسب با موجودی شما چیده می‌شوند.</p></div></div></div>
           <label class="mt-4 flex cursor-pointer items-center gap-4 rounded-2xl border p-4 shadow-sm transition sm:p-5" :class="aiOptions.limitHogu ? 'border-blue-400 bg-blue-50' : 'border-slate-200 bg-white hover:border-blue-200'"><input v-model="aiOptions.limitHogu" type="checkbox" class="h-5 w-5 shrink-0 accent-blue-600"><span class="flex-1"><b class="block text-sm text-slate-900">محدودیت تعداد هوگو دارم</b><span class="mt-1 block text-xs leading-6 text-slate-500">با فعال کردن این گزینه، تعداد جفت هوگوی هر سایز را وارد می‌کنید.</span></span><span class="rounded-full px-3 py-1 text-xs font-black" :class="aiOptions.limitHogu ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-500'">{{aiOptions.limitHogu ? 'فعال' : 'اختیاری'}}</span></label>
           <div v-if="aiOptions.limitHogu" class="mt-4 rounded-2xl border border-blue-100 bg-white p-4 shadow-sm sm:p-5"><div class="mb-4 text-sm font-black text-slate-800">از هر سایز چند جفت دارید؟</div><div class="grid grid-cols-2 gap-3 sm:grid-cols-4"><label v-for="size in ['1','2','3','4']" :key="size" class="rounded-xl border p-4 text-sm font-bold text-slate-700" :class="neededHoguSizes.includes(size) ? 'border-blue-200 bg-blue-50/50' : 'border-slate-200 bg-slate-50'">سایز {{size}}<span v-if="neededHoguSizes.includes(size)" class="mr-1 text-[10px] text-blue-700">موردنیاز</span><input v-model.number="aiOptions.hoguPairs[size]" type="number" min="0" max="100" class="mt-3 block w-full rounded-lg border border-slate-300 bg-white p-2.5 text-lg font-black text-slate-900 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"></label></div><p class="mt-3 text-xs leading-6 text-slate-500">سایز پیشنهادی هر وزن از ردهٔ سنی و وزن محاسبه می‌شود.</p></div>
-          <div class="mt-6 flex flex-wrap items-center justify-between gap-3"><button class="rounded-xl border border-slate-200 bg-white px-5 py-2.5 text-sm font-bold text-slate-600 hover:bg-slate-50" @click="aiStage=0">بازگشت</button><button class="rounded-xl bg-blue-600 px-6 py-3 text-sm font-black text-white shadow-sm hover:bg-blue-700" @click="nextAiStage">ادامه به انتخاب زمین ←</button></div>
+          <div class="mt-6 flex flex-wrap items-center justify-between gap-3"><button class="rounded-xl border border-slate-200 bg-white px-5 py-2.5 text-sm font-bold text-slate-600 hover:bg-slate-50" @click="aiStage=0">بازگشت</button><button class="rounded-xl bg-blue-600 px-6 py-3 text-sm font-black text-white shadow-sm hover:bg-blue-700" @click="nextAiStage">پیشنهاد زمین‌ها ←</button></div>
         </div>
 
         <div v-else-if="aiStage === 2" class="mt-5">
-          <div class="flex flex-wrap items-start justify-between gap-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6"><div><div class="mb-2 text-xs font-black text-blue-700">گام ۳ از ۴</div><h3 class="text-xl font-black text-slate-900">زمین هر وزن را انتخاب کنید</h3><p class="mt-2 max-w-2xl text-sm leading-7 text-slate-600">برای هر وزن یک یا دو زمین بزنید. اولین زمین انتخابی محل فینال است؛ انتخاب‌هایتان هنگام ورق زدن حفظ می‌شود.</p></div><span class="rounded-full bg-blue-50 px-4 py-2 text-xs font-black text-blue-700">{{aiCourtPage + 1}} از {{aiCourtPageCount}} · {{playableWeights.length}} وزن</span></div>
+          <div class="flex flex-wrap items-start justify-between gap-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6"><div><div class="mb-2 text-xs font-black text-blue-700">گام ۳ از ۴</div><h3 class="text-xl font-black text-slate-900">زمین‌های پیشنهادی وزن‌ها</h3><p class="mt-2 max-w-2xl text-sm leading-7 text-slate-600">{{aiCourtsSuggested ? 'بر اساس تعداد جفت هوگو و تعداد بازی‌ها چیده شده‌اند.' : 'انتخاب‌های شما ثبت شده‌اند.'}} لازم نیست زمین‌ها را دستی تعیین کنید؛ اگر خواستید روی زمین هر وزن بزنید و تغییرشان دهید. اولین زمین محل فینال است.</p></div><span class="rounded-full bg-blue-50 px-4 py-2 text-xs font-black text-blue-700">{{aiCourtPage + 1}} از {{aiCourtPageCount}} · {{playableWeights.length}} وزن</span></div>
+          <div class="mt-3 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-2.5"><span class="text-xs font-bold text-emerald-900">{{aiCourtsSuggested ? 'پیشنهاد آماده است؛ می‌توانید مستقیم پیش‌نمایش را بسازید.' : 'زمین‌ها را به دلخواه تغییر داده‌اید.'}}</span><button class="rounded-lg border border-emerald-300 bg-white px-3 py-1.5 text-xs font-black text-emerald-800 hover:bg-emerald-100" @click="suggestAiCourts">پیشنهاد دوباره بر اساس هوگو</button></div>
           <div class="mt-4 grid gap-3 lg:grid-cols-2">
             <div v-for="(category, index) in visibleAiWeights" :key="category" class="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm transition hover:border-blue-300 sm:p-5">
               <div class="mb-4 flex items-start justify-between gap-3"><div><div class="text-[10px] font-black tracking-wide text-blue-600">وزن {{aiCourtPage * aiCourtPageSize + index + 1}} از {{playableWeights.length}}</div><h4 class="mt-1 text-xl font-black text-slate-900">{{category}}</h4></div><div class="rounded-xl bg-sky-50 px-3 py-2 text-left text-xs font-bold text-sky-800">{{matches.filter(m=>!m.isBye&&m.weightCategory===category).length}} بازی<br>هوگو {{aiHoguSize(category)}}</div></div>
