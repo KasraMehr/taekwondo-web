@@ -2,7 +2,7 @@
 <template>
   <div
       v-if="match"
-      class="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6"
+      class="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-3"
       role="dialog"
       aria-modal="true"
       :aria-label="`ثبت نتیجه بازی وزن ${match.weightCategory}`"
@@ -12,60 +12,66 @@
     <div
         ref="panel"
         tabindex="-1"
-        class="relative w-full max-w-3xl max-h-[92vh] flex flex-col rounded-2xl bg-white shadow-2xl outline-none"
+        class="relative flex max-h-[98dvh] w-full max-w-5xl flex-col overflow-hidden rounded-2xl border border-slate-300 bg-white shadow-2xl outline-none"
         @keydown.esc.stop="requestClose"
     >
-      <!-- هدر -->
-      <div class="flex items-center gap-3 px-5 py-3.5 border-b border-slate-200 bg-gradient-to-l from-slate-50 to-white rounded-t-2xl">
-        <span class="bg-blue-600 text-white text-[12px] font-bold px-3 py-1 rounded-full">
-          وزن {{ match.weightCategory }}
-        </span>
-        <span class="text-[12px] text-slate-500">{{ roundLabel }}</span>
+      <div class="flex items-center gap-3 border-b border-slate-200 bg-white px-3 py-2 sm:px-4">
+        <div class="grid h-8 w-8 place-items-center rounded-lg border border-blue-200 bg-blue-50 text-lg text-blue-700">✦</div>
+        <div class="min-w-0">
+          <div class="text-sm font-black text-slate-900">برگه ثبت امتیازات</div>
+          <div class="text-[11px] text-slate-500">{{ store.currentTournament?.name || 'مسابقات تکواندو' }}</div>
+        </div>
+        <span class="rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-bold text-slate-600">{{ roundLabel }}</span>
         <span
             v-if="match.status === 'completed'"
-            class="text-[11px] text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-full font-semibold"
+            class="rounded-full bg-emerald-50 px-2.5 py-1 text-[11px] font-semibold text-emerald-700"
         >ثبت‌شده</span>
         <span
             v-else-if="match.status === 'ongoing'"
-            class="text-[11px] text-amber-700 bg-amber-50 px-2.5 py-1 rounded-full font-semibold"
+            class="rounded-full bg-amber-50 px-2.5 py-1 text-[11px] font-semibold text-amber-700"
         >در جریان</span>
 
         <button
-            class="mr-auto w-8 h-8 rounded-lg text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition"
+            class="mr-auto grid h-9 w-9 place-items-center rounded-lg text-slate-500 transition hover:bg-slate-100 hover:text-slate-900"
             aria-label="بستن"
             @click="requestClose"
         >✕</button>
       </div>
 
-      <div class="flex-1 overflow-y-auto px-5 py-4">
-        <!-- کرنرها -->
-        <div class="flex items-stretch gap-2 mb-4">
-          <div class="flex-1 rounded-xl border-2 border-blue-200 bg-blue-50/60 px-3 py-2.5 text-center">
-            <div class="text-[10px] font-bold text-blue-600 mb-0.5">آبی</div>
-            <div class="text-[13.5px] font-bold text-slate-800 truncate">{{ blueName }}</div>
-            <div class="text-[10.5px] text-slate-400 truncate">{{ blueClub || '—' }}</div>
+      <div class="min-h-0 flex-1 overflow-y-auto overscroll-contain p-2 sm:p-3">
+        <div class="mx-auto max-w-[1050px] bg-white">
+          <div class="mb-2 grid grid-cols-3 gap-px overflow-hidden rounded-lg border border-slate-200 bg-slate-200 text-[11px] sm:grid-cols-6">
+            <div class="bg-slate-50 px-2 py-1.5"><span class="text-slate-500">تاریخ: </span><b>{{ matchDate }}</b></div>
+            <div class="bg-slate-50 px-2 py-1.5"><span class="text-slate-500">روز: </span><b>{{ match.day ?? 1 }}</b></div>
+            <div class="bg-slate-50 px-2 py-1.5"><span class="text-slate-500">زمین: </span><b>{{ match.court ?? '—' }}</b></div>
+            <div class="bg-slate-50 px-2 py-1.5"><span class="text-slate-500">بازی: </span><b>{{ match.matchNumber ?? '—' }}</b></div>
+            <div class="bg-slate-50 px-2 py-1.5"><span class="text-slate-500">وزن: </span><b>{{ match.weightCategory }}</b></div>
+            <div class="bg-slate-50 px-2 py-1.5"><span class="text-slate-500">مرحله: </span><b>{{ roundLabel }}</b></div>
           </div>
 
-          <button
-              class="px-2.5 rounded-xl border border-slate-200 text-slate-400 hover:text-slate-700 hover:border-slate-300 transition text-lg"
-              aria-label="جابه‌جایی کرنر آبی و قرمز"
-              title="جابه‌جایی کرنرها"
-              @click="swapCorners = !swapCorners"
-          >⇄</button>
-
-          <div class="flex-1 rounded-xl border-2 border-rose-200 bg-rose-50/60 px-3 py-2.5 text-center">
-            <div class="text-[10px] font-bold text-rose-600 mb-0.5">قرمز</div>
-            <div class="text-[13.5px] font-bold text-slate-800 truncate">{{ redName }}</div>
-            <div class="text-[10.5px] text-slate-400 truncate">{{ redClub || '—' }}</div>
+          <div class="mb-2 grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] gap-2" dir="ltr">
+            <div class="min-w-0 overflow-hidden border border-blue-300" dir="rtl">
+              <div class="bg-blue-700 px-2 py-1 text-center text-xs font-black tracking-wide text-white">CHUNG · آبی</div>
+              <div class="min-w-0 bg-blue-50/40 px-3 py-1.5 text-center">
+                <div class="truncate text-sm font-black text-slate-900" :title="blueName">{{ blueName }}</div>
+                <div class="truncate text-[11px] text-slate-500" :title="blueClub">باشگاه: {{ blueClub || '—' }}</div>
+              </div>
+            </div>
+            <button class="self-center rounded-lg border border-slate-300 bg-white px-2 py-1 text-sm font-bold text-slate-600 transition hover:border-blue-400 hover:text-blue-700" aria-label="جابه‌جایی کرنر آبی و قرمز" title="جابه‌جایی کرنرها" @click="swapCorners = !swapCorners">⇄</button>
+            <div class="min-w-0 overflow-hidden border border-rose-300" dir="rtl">
+              <div class="bg-rose-700 px-2 py-1 text-center text-xs font-black tracking-wide text-white">HONG · قرمز</div>
+              <div class="min-w-0 bg-rose-50/40 px-3 py-1.5 text-center">
+                <div class="truncate text-sm font-black text-slate-900" :title="redName">{{ redName }}</div>
+                <div class="truncate text-[11px] text-slate-500" :title="redClub">باشگاه: {{ redClub || '—' }}</div>
+              </div>
+            </div>
           </div>
-        </div>
 
-        <!-- حالت ثبت -->
-        <div class="flex gap-2 mb-4">
+        <div class="mb-2 flex gap-2 border-b border-slate-200 pb-2">
           <button
               v-for="opt in modeOptions"
               :key="opt.value"
-              class="flex-1 py-2 rounded-xl text-[12.5px] border transition"
+              class="flex-1 rounded-lg border py-1.5 text-xs transition"
               :class="mode === opt.value
                 ? 'bg-slate-800 text-white border-slate-800'
                 : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'"
@@ -73,147 +79,41 @@
           >{{ opt.label }}</button>
         </div>
 
-        <!-- ── حالت امتیازی ── -->
+        <!-- جدول امتیاز راندها، با چینش مشابه برگهٔ رسمی -->
         <template v-if="mode === 'score'">
-          <div
-              v-for="(r, ri) in rounds"
-              :key="r.number"
-              class="rounded-xl border border-slate-200 mb-3 overflow-hidden"
-          >
-            <div class="flex items-center gap-2 px-3 py-2 bg-slate-50 border-b border-slate-200">
-              <span class="text-[12.5px] font-bold text-slate-700">
-                {{ r.isGoldenPoint ? 'راند سوم' : `راند ${r.number}` }}
-              </span>
-              <span class="text-[12px] font-mono text-slate-500">
-                {{ totals[ri].blue }} : {{ totals[ri].red }}
-              </span>
-              <span
-                  v-if="outcomes[ri].winner"
-                  class="text-[11px] px-2 py-0.5 rounded-full font-semibold"
-                  :class="outcomes[ri].winner === 'blue'
-                    ? 'bg-blue-100 text-blue-700' : 'bg-rose-100 text-rose-700'"
-              >
-                برنده {{ outcomes[ri].winner === 'blue' ? 'آبی' : 'قرمز' }}
-                <template v-if="outcomes[ri].endedBy"> · {{ outcomes[ri].endedBy }}</template>
-              </span>
-              <span v-else class="text-[11px] px-2 py-0.5 rounded-full bg-slate-200 text-slate-600">
-                تساوی کامل
-              </span>
-
-              <button
-                  v-if="rounds.length > 2 && ri === rounds.length - 1"
-                  class="mr-auto text-[11px] text-rose-500 hover:text-rose-700"
-                  @click="removeLastRound"
-              >حذف راند</button>
-            </div>
-
-            <table class="w-full text-[12px]">
-              <thead>
-              <tr class="text-slate-400 text-[10.5px]">
-                <th class="w-24 py-1.5 font-medium text-center">آبی</th>
-                <th class="py-1.5 font-medium">تکنیک</th>
-                <th class="w-24 py-1.5 font-medium text-center">قرمز</th>
-              </tr>
-              </thead>
-              <tbody>
-              <tr v-for="t in TECHNIQUES" :key="t.key" class="border-t border-slate-100">
-                <td class="py-1">
-                  <Counter
-                      :value="r.blue[t.key]"
-                      tone="blue"
-                      :label="`${t.label} آبی، راند ${r.number}`"
-                      @change="v => (r.blue[t.key] = v)"
-                  />
-                </td>
-                <td class="text-center text-slate-600">
-                  {{ t.label }}
-                  <span class="text-slate-400 text-[10.5px]">({{ t.pts }})</span>
-                </td>
-                <td class="py-1">
-                  <Counter
-                      :value="r.red[t.key]"
-                      tone="red"
-                      :label="`${t.label} قرمز، راند ${r.number}`"
-                      @change="v => (r.red[t.key] = v)"
-                  />
-                </td>
-              </tr>
-
-              <tr v-for="p in PENALTIES" :key="p.key" class="border-t border-slate-100 bg-amber-50/40">
-                <td class="py-1">
-                  <Counter
-                      :value="r.blue[p.key]"
-                      tone="blue"
-                      :label="`${p.label} آبی، راند ${r.number}`"
-                      @change="v => (r.blue[p.key] = v)"
-                  />
-                </td>
-                <td class="text-center text-amber-800">
-                  {{ p.label }}
-                  <span class="text-amber-600/70 text-[10.5px]">({{ p.pts }}+ حریف)</span>
-                </td>
-                <td class="py-1">
-                  <Counter
-                      :value="r.red[p.key]"
-                      tone="red"
-                      :label="`${p.label} قرمز، راند ${r.number}`"
-                      @change="v => (r.red[p.key] = v)"
-                  />
-                </td>
-              </tr>
-              </tbody>
-            </table>
-
-            <!-- برنده دستی وقتی تساوی کامل است -->
-            <div v-if="!autoOutcomes[ri].winner" class="flex items-center gap-2 px-3 py-2 border-t border-slate-200 bg-slate-50">
-              <span class="text-[11.5px] text-slate-500">تصمیم برتری (SUP):</span>
-              <button
-                  class="text-[11.5px] px-2.5 py-1 rounded-lg border transition"
-                  :class="r.winner === 'blue'
-                    ? 'bg-blue-600 text-white border-blue-600'
-                    : 'bg-white border-slate-200 text-slate-600 hover:bg-blue-50'"
-                  @click="setManual(ri, 'blue')"
-              >آبی</button>
-              <button
-                  class="text-[11.5px] px-2.5 py-1 rounded-lg border transition"
-                  :class="r.winner === 'red'
-                    ? 'bg-rose-600 text-white border-rose-600'
-                    : 'bg-white border-slate-200 text-slate-600 hover:bg-rose-50'"
-                  @click="setManual(ri, 'red')"
-              >قرمز</button>
-              <button
-                  v-if="r.manualWinner"
-                  class="mr-auto text-[11px] text-slate-400 hover:text-slate-600"
-                  @click="setManual(ri, null)"
-              >پاک کردن</button>
-            </div>
+          <div class="mb-2 flex flex-wrap items-center gap-1.5">
+            <button v-for="(r, ri) in rounds" :key="r.number" class="rounded-lg border px-3 py-1.5 text-xs font-bold transition" :class="activeRoundIndex === ri ? 'border-slate-800 bg-slate-800 text-white' : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'" :aria-pressed="activeRoundIndex === ri" @click="activeRoundIndex = ri">راند {{ r.number }} <span class="mr-1 font-mono">{{ totals[ri].blue }}–{{ totals[ri].red }}</span></button>
+            <button v-if="canAddRound" class="rounded-lg border border-dashed border-blue-300 px-2.5 py-1.5 text-xs font-bold text-blue-700 hover:bg-blue-50" @click="addRound(matchOutcome.blueRoundsWon === matchOutcome.redRoundsWon && rounds.length >= 2)">+ راند</button>
           </div>
-
-          <button
-              v-if="canAddRound"
-              class="w-full py-2 rounded-xl border border-dashed border-slate-300 text-[12.5px] text-slate-500 hover:bg-slate-50 hover:border-slate-400 transition"
-              @click="addRound(matchOutcome.blueRoundsWon === matchOutcome.redRoundsWon && rounds.length >= 2)"
-          >
-            + افزودن {{ rounds.length >= 2 ? 'راند سوم' : 'راند' }}
-          </button>
-
-          <!-- خلاصه -->
-          <div class="mt-4 rounded-xl bg-slate-50 border border-slate-200 px-3.5 py-2.5 flex items-center gap-3 flex-wrap">
-            <span class="text-[12px] text-slate-500">راندهای برده:</span>
-            <span class="text-[12.5px] font-bold text-blue-700">آبی {{ matchOutcome.blueRoundsWon }}</span>
-            <span class="text-slate-300">/</span>
-            <span class="text-[12.5px] font-bold text-rose-700">قرمز {{ matchOutcome.redRoundsWon }}</span>
-            <span
-                v-if="matchOutcome.decided"
-                class="mr-auto text-[12.5px] font-bold text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-full"
-            >
-              برنده: {{ matchOutcome.winnerCorner === 'blue' ? blueName : redName }}
-              ({{ matchOutcome.winType }})
-            </span>
-            <span v-else class="mr-auto text-[12px] text-amber-700">برنده هنوز مشخص نیست</span>
-          </div>
+          <section v-for="(r, ri) in rounds" v-show="activeRoundIndex === ri" :key="r.number" class="mb-2 overflow-hidden rounded-lg border border-slate-300 bg-white">
+            <div class="flex flex-wrap items-center gap-2 border-b border-slate-300 bg-slate-100 px-2 py-1">
+              <span class="rounded-md bg-slate-900 px-2.5 py-1 text-xs font-black text-white">R{{ r.number }}</span>
+              <b class="text-sm text-slate-800">{{ r.isGoldenPoint ? 'راند سوم / امتیاز طلایی' : `راند ${r.number}` }}</b>
+              <span class="mr-auto font-mono text-sm font-black tabular-nums text-slate-700">{{ totals[ri].blue }} : {{ totals[ri].red }}</span>
+              <button v-if="rounds.length > 2 && ri === rounds.length - 1" class="text-xs font-bold text-rose-600 hover:text-rose-800" @click="removeLastRound">حذف راند</button>
+            </div>
+            <div class="grid md:grid-cols-[minmax(0,1fr)_7rem_minmax(0,1fr)]" dir="ltr">
+              <div class="min-w-0 border-b border-blue-200 lg:border-b-0 lg:border-r" dir="rtl">
+                <div class="flex items-center justify-between bg-blue-50 px-3 py-2 text-xs font-black text-blue-800"><span>CHUNG · امتیاز آبی</span><span class="rounded-md bg-blue-700 px-2 py-0.5 font-mono text-base text-white">{{ totals[ri].blue }}</span></div>
+                <div class="px-3 py-2"><div class="mb-1 text-[11px] font-black text-slate-500">Deuk-Jeom · امتیاز تکنیک‌ها</div><div class="grid gap-x-3 gap-y-1 sm:grid-cols-2 lg:grid-cols-2"><div v-for="tech in TECHNIQUES" :key="tech.key" class="flex min-h-10 items-center justify-between gap-2 border-b border-slate-100 text-xs"><span class="min-w-0 text-slate-700">{{ tech.label }} <small class="text-slate-400">({{ tech.pts }})</small></span><Counter :value="r.blue[tech.key]" tone="blue" :label="`${tech.label} آبی، راند ${r.number}`" @change="v => (r.blue[tech.key] = v)" /></div></div></div>
+                <div class="border-t border-blue-100 bg-amber-50/40 px-3 py-2"><div class="mb-1 text-[11px] font-black text-amber-800">Gam-Jeom · اخطارها</div><div class="grid gap-x-3 sm:grid-cols-2 lg:grid-cols-2"><div v-for="penalty in PENALTIES" :key="penalty.key" class="flex min-h-10 items-center justify-between gap-2 text-xs"><span class="min-w-0 text-slate-700">{{ penalty.label }}</span><Counter :value="r.blue[penalty.key]" tone="blue" :label="`${penalty.label} آبی، راند ${r.number}`" @change="v => (r.blue[penalty.key] = v)" /></div></div></div>
+              </div>
+              <div class="flex min-h-28 flex-col items-center justify-center gap-2 border-y border-slate-200 bg-slate-50 px-2 py-4 text-center lg:border-x lg:border-y-0" dir="rtl">
+                <span class="text-[11px] font-black text-slate-500">برندهٔ راند {{ r.number }}</span>
+                <span v-if="outcomes[ri].winner" class="rounded-full px-3 py-1 text-xs font-black" :class="outcomes[ri].winner === 'blue' ? 'bg-blue-100 text-blue-800' : 'bg-rose-100 text-rose-800'">{{ outcomes[ri].winner === 'blue' ? 'آبی' : 'قرمز' }}</span>
+                <span v-else class="rounded-full bg-amber-100 px-3 py-1 text-xs font-bold text-amber-800">نیاز به تصمیم برتری</span>
+                <span v-if="outcomes[ri].endedBy" class="text-[10px] font-bold text-slate-500">{{ outcomes[ri].endedBy }}</span>
+              </div>
+              <div class="min-w-0 border-t border-rose-200 lg:border-t-0 lg:border-l" dir="rtl">
+                <div class="flex items-center justify-between bg-rose-50 px-3 py-2 text-xs font-black text-rose-800"><span>HONG · امتیاز قرمز</span><span class="rounded-md bg-rose-700 px-2 py-0.5 font-mono text-base text-white">{{ totals[ri].red }}</span></div>
+                <div class="px-3 py-2"><div class="mb-1 text-[11px] font-black text-slate-500">Deuk-Jeom · امتیاز تکنیک‌ها</div><div class="grid gap-x-3 gap-y-1 sm:grid-cols-2 lg:grid-cols-2"><div v-for="tech in TECHNIQUES" :key="tech.key" class="flex min-h-10 items-center justify-between gap-2 border-b border-slate-100 text-xs"><span class="min-w-0 text-slate-700">{{ tech.label }} <small class="text-slate-400">({{ tech.pts }})</small></span><Counter :value="r.red[tech.key]" tone="red" :label="`${tech.label} قرمز، راند ${r.number}`" @change="v => (r.red[tech.key] = v)" /></div></div></div>
+                <div class="border-t border-rose-100 bg-amber-50/40 px-3 py-2"><div class="mb-1 text-[11px] font-black text-amber-800">Gam-Jeom · اخطارها</div><div class="grid gap-x-3 sm:grid-cols-2 lg:grid-cols-2"><div v-for="penalty in PENALTIES" :key="penalty.key" class="flex min-h-10 items-center justify-between gap-2 text-xs"><span class="min-w-0 text-slate-700">{{ penalty.label }}</span><Counter :value="r.red[penalty.key]" tone="red" :label="`${penalty.label} قرمز، راند ${r.number}`" @change="v => (r.red[penalty.key] = v)" /></div></div></div>
+              </div>
+            </div>
+            <div v-if="!autoOutcomes[ri].winner" class="flex flex-wrap items-center gap-2 border-t border-slate-200 bg-amber-50 px-3 py-2"><span class="text-xs font-bold text-amber-900">تصمیم برتری راند:</span><button class="rounded-lg border px-3 py-1.5 text-xs font-bold" :class="r.winner === 'blue' ? 'border-blue-600 bg-blue-600 text-white' : 'border-blue-200 bg-white text-blue-700'" @click="setManual(ri, 'blue')">آبی</button><button class="rounded-lg border px-3 py-1.5 text-xs font-bold" :class="r.winner === 'red' ? 'border-rose-600 bg-rose-600 text-white' : 'border-rose-200 bg-white text-rose-700'" @click="setManual(ri, 'red')">قرمز</button><button v-if="r.manualWinner" class="mr-auto text-xs text-slate-500 hover:text-slate-700" @click="setManual(ri, null)">پاک کردن</button></div>
+          </section>
+          <div class="grid gap-px overflow-hidden rounded-lg border border-slate-300 bg-slate-300 text-center text-xs sm:grid-cols-3"><div class="bg-blue-50 p-2 font-bold text-blue-800">راندهای آبی <b class="mr-1 text-base">{{ matchOutcome.blueRoundsWon }}</b></div><div class="bg-white p-2 font-black text-slate-800">{{ matchOutcome.decided ? `برنده: ${matchOutcome.winnerCorner === 'blue' ? blueName : redName}` : 'برنده هنوز مشخص نیست' }}<span v-if="matchOutcome.winType" class="mr-1 text-slate-500">({{ matchOutcome.winType }})</span></div><div class="bg-rose-50 p-2 font-bold text-rose-800">راندهای قرمز <b class="mr-1 text-base">{{ matchOutcome.redRoundsWon }}</b></div></div>
         </template>
-
         <!-- ── حالت غیرامتیازی ── -->
         <template v-else>
           <div class="grid grid-cols-2 sm:grid-cols-3 gap-2 mb-4">
@@ -253,24 +153,25 @@
         </template>
 
         <!-- یادداشت -->
-        <div class="mt-4">
-          <label class="block text-[11.5px] text-slate-500 mb-1" for="match-note">یادداشت داور (اختیاری)</label>
-          <textarea
+        <div class="mt-2">
+          <label class="sr-only" for="match-note">یادداشت داور (اختیاری)</label>
+          <input
               id="match-note"
               v-model="note"
-              rows="2"
-              class="w-full rounded-xl border border-slate-200 px-3 py-2 text-[12.5px] focus:outline-none focus:ring-2 focus:ring-blue-200 focus:border-blue-300"
-              placeholder="مثلاً: توقف پزشکی در ثانیه ۴۵ راند دوم"
+              type="text"
+              class="w-full rounded-lg border border-slate-200 px-3 py-1.5 text-xs focus:border-blue-300 focus:outline-none focus:ring-2 focus:ring-blue-200"
+              placeholder="یادداشت داور (اختیاری)"
           />
         </div>
 
         <p v-if="error" class="mt-3 text-[12.5px] text-rose-600 bg-rose-50 border border-rose-200 rounded-xl px-3 py-2" role="alert">
           {{ error }}
         </p>
+        </div>
       </div>
 
       <!-- فوتر -->
-      <div class="flex items-center gap-2 px-5 py-3 border-t border-slate-200 bg-slate-50/70 rounded-b-2xl">
+      <div class="flex items-center gap-2 rounded-b-2xl border-t border-slate-200 bg-slate-50/70 px-4 py-2">
         <button
             v-if="match.status === 'completed'"
             class="text-[12.5px] text-rose-600 hover:text-rose-800 px-3 py-2 rounded-lg hover:bg-rose-50 transition"
@@ -310,6 +211,14 @@ const props = defineProps({
 const emit = defineEmits<{ (e: 'close'): void; (e: 'saved', id: string): void }>()
 
 const store = useTournamentStore()
+const matchDate = computed(() => {
+  const value = store.currentTournament?.date
+  if (!value) return '—'
+  const date = new Date(value)
+  return Number.isNaN(date.getTime()) ? value : new Intl.DateTimeFormat('fa-IR-u-ca-persian', {
+    year: 'numeric', month: '2-digit', day: '2-digit', timeZone: 'Asia/Tehran',
+  }).format(date)
+})
 
 /* شمارنده‌ی کوچک، inline تا فایل اضافه نشود */
 const Counter = defineComponent({
@@ -320,7 +229,7 @@ const Counter = defineComponent({
   },
   emits: ['change'],
   setup(p, { emit }) {
-    const btn = 'w-6 h-6 rounded-md text-[13px] leading-none font-bold transition select-none disabled:opacity-30'
+    const btn = 'h-8 w-8 rounded-md text-base leading-none font-bold transition select-none disabled:opacity-30'
     const tint = () => (p.tone === 'red'
         ? 'bg-rose-100 text-rose-700 hover:bg-rose-200'
         : 'bg-blue-100 text-blue-700 hover:bg-blue-200')
@@ -332,7 +241,7 @@ const Counter = defineComponent({
         onClick: () => emit('change', Math.max(0, p.value - 1)),
       }, '−'),
       h('span', {
-        class: 'w-6 text-center font-mono text-[13px] text-slate-800',
+        class: 'w-6 text-center font-mono text-sm font-bold tabular-nums text-slate-800',
         'aria-label': p.label,
       }, String(p.value)),
       h('button', {
@@ -373,6 +282,7 @@ const modeOptions = [
 const panel = ref<HTMLElement | null>(null)
 const mode = ref<'score' | 'manual'>('score')
 const rounds = ref<MatchRound[]>([])
+const activeRoundIndex = ref(0)
 const swapCorners = ref(false)
 const manualWinType = ref<WinType>('WDR')
 const manualWinnerId = ref<string | null>(null)
@@ -426,6 +336,7 @@ function hydrate() {
   const m = props.match
   error.value = ''
   dirty.value = false
+  activeRoundIndex.value = 0
   if (!m) return
 
   const res = m.result
@@ -457,9 +368,13 @@ watch([rounds, mode, manualWinnerId, manualWinType, note, swapCorners],
 /* اکشن‌ها */
 function addRound(golden = false) {
   rounds.value.push(emptyRound(rounds.value.length + 1, golden))
+  activeRoundIndex.value = rounds.value.length - 1
 }
 function removeLastRound() {
-  if (rounds.value.length > 2) rounds.value.pop()
+  if (rounds.value.length > 2) {
+    rounds.value.pop()
+    activeRoundIndex.value = rounds.value.length - 1
+  }
 }
 function setManual(i: number, corner: 'blue' | 'red' | null) {
   const r = rounds.value[i]
