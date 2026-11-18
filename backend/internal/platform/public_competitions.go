@@ -21,7 +21,7 @@ func (a *API) publicCompetitions(r *Request) (any, error) {
 			return nil, bad("invalid offset")
 		}
 	}
-	rows, err := r.Tx.Query(r.Context(), `SELECT t.id::text,t.name,t.event_date::text,t.gender,t.age_category,t.courts,COALESCE(l.name,''),o.name FROM tournaments t JOIN organizations o ON o.id=t.organization_id LEFT JOIN leagues l ON l.id=t.league_id WHERE ($1='' OR t.name ILIKE '%' || $1 || '%' OR l.name ILIKE '%' || $1 || '%') ORDER BY t.event_date DESC,t.id LIMIT 51 OFFSET $2`, strings.TrimSpace(r.C.Query("q")), offset)
+	rows, err := r.Tx.Query(r.Context(), `SELECT t.id::text,t.name,t.event_date::text,t.gender,t.age_category,t.courts,COALESCE(l.name,''),o.name FROM tournaments t JOIN organizations o ON o.id=t.organization_id LEFT JOIN leagues l ON l.id=t.league_id WHERE ($1='' OR t.name ILIKE '%' || $1 || '%' OR l.name ILIKE '%' || $1 || '%') ORDER BY CASE WHEN t.event_date=(now() AT TIME ZONE 'Asia/Tehran')::date THEN 0 WHEN t.event_date>(now() AT TIME ZONE 'Asia/Tehran')::date THEN 1 ELSE 2 END, CASE WHEN t.event_date>=(now() AT TIME ZONE 'Asia/Tehran')::date THEN t.event_date END ASC, t.event_date DESC,t.id LIMIT 51 OFFSET $2`, strings.TrimSpace(r.C.Query("q")), offset)
 	if err != nil {
 		return nil, err
 	}
@@ -82,9 +82,9 @@ func (a *API) publicCompetition(r *Request) (any, error) {
 	for _, m := range t.Matches {
 		var result any
 		if m.Result != nil {
-			result = gin.H{"winType": m.Result.WinType, "winnerCorner": m.Result.WinnerCorner, "rounds": m.Result.Rounds}
+			result = gin.H{"winType": m.Result.WinType, "winnerCorner": m.Result.WinnerCorner, "blueId": m.Result.BlueID, "redId": m.Result.RedID, "rounds": m.Result.Rounds}
 		}
-		matches = append(matches, gin.H{"id": m.ID, "athlete1Id": m.Athlete1ID, "athlete2Id": m.Athlete2ID, "winnerId": m.WinnerID, "court": m.Court, "order": m.Order, "matchNumber": m.MatchNumber, "status": m.Status, "round": m.Round, "side": m.Side, "weightCategory": m.WeightCategory, "nextMatchId": m.NextMatchID, "nextSlot": m.NextSlot, "isBye": m.IsBye, "result": result})
+		matches = append(matches, gin.H{"id": m.ID, "athlete1Id": m.Athlete1ID, "athlete2Id": m.Athlete2ID, "winnerId": m.WinnerID, "court": m.Court, "order": m.Order, "matchNumber": m.MatchNumber, "bracketIndex": m.BracketIndex, "status": m.Status, "round": m.Round, "side": m.Side, "weightCategory": m.WeightCategory, "nextMatchId": m.NextMatchID, "nextSlot": m.NextSlot, "isBye": m.IsBye, "result": result})
 	}
 	cfg := leagues.DefaultScoring()
 	scope := "tournament"

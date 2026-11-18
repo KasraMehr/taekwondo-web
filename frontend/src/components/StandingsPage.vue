@@ -69,7 +69,8 @@
                 >
                   <StandingCard
                       :match="m"
-                      :athlete-map="athleteMap"
+                      :public-athletes="publicTournament?.athletes"
+                      :public-matches="publicTournament?.matches"
                   />
                 </div>
               </div>
@@ -99,7 +100,8 @@
               >
                 <StandingCard
                     :match="m"
-                    :athlete-map="athleteMap"
+                    :public-athletes="publicTournament?.athletes"
+                    :public-matches="publicTournament?.matches"
                 />
               </div>
             </div>
@@ -133,7 +135,8 @@
                 >
                   <StandingCard
                       :match="m"
-                      :athlete-map="athleteMap"
+                      :public-athletes="publicTournament?.athletes"
+                      :public-matches="publicTournament?.matches"
                   />
                 </div>
               </div>
@@ -193,6 +196,9 @@ import { useTournamentStore } from '../stores/tournament'
 import MatchResultModal from './MatchResultModal.vue'
 import MatchResultDetails from './MatchResultDetails.vue'
 import { webApi } from '../webApi'
+import type { Athlete, Match } from '../types'
+
+const props = defineProps<{ publicTournament?: { athletes: Athlete[]; matches: Match[]; leagueId?: string | null } }>()
 
 const activeMatch = computed(() =>
     activeMatchId.value
@@ -207,7 +213,7 @@ const detailsMatch = computed(() =>
 
 /** بازی قابل ثبت است؟ */
 function isPlayable(m: any) {
-  return !m.isBye && !!m.athlete1Id && !!m.athlete2Id
+  return !props.publicTournament && !m.isBye && !!m.athlete1Id && !!m.athlete2Id
 }
 
 const openingMatch=ref(false)
@@ -247,8 +253,8 @@ const EXTRA = 48
 const MIN_ZOOM = 0.32
 const PRINT_W = 1010 // A4 landscape @96dpi با حاشیه ۱۰mm
 
-const allMatches = computed(() => store.currentTournament?.matches ?? [])
-const athletes = computed(() => store.currentTournament?.athletes ?? [])
+const allMatches = computed(() => props.publicTournament?.matches ?? store.currentTournament?.matches ?? [])
+const athletes = computed(() => props.publicTournament?.athletes ?? store.currentTournament?.athletes ?? [])
 const hasMatches = computed(() => allMatches.value.length > 0)
 const selectedCategory = ref<string | null>(null)
 
@@ -350,15 +356,15 @@ const brackets = computed(() => {
       const gold = am.get(fm.winnerId)
       const silverId = fm.athlete1Id === fm.winnerId ? fm.athlete2Id : fm.athlete1Id
       const silver = silverId ? am.get(silverId) : null
-      if (gold) standings.push({ key: 'g' + gold.id, medal: '🥇', name: gold.name, club: gold.club || (store.currentTournament?.leagueId ? gold.coach : '') || '', bgClass: 'gold' })
-      if (silver) standings.push({ key: 's' + silver.id, medal: '🥈', name: silver.name, club: silver.club || (store.currentTournament?.leagueId ? silver.coach : '') || '', bgClass: 'silver' })
+      if (gold) standings.push({ key: 'g' + gold.id, medal: '🥇', name: gold.name, club: gold.club || ((props.publicTournament?.leagueId ?? store.currentTournament?.leagueId) ? gold.coach : '') || '', bgClass: 'gold' })
+      if (silver) standings.push({ key: 's' + silver.id, medal: '🥈', name: silver.name, club: silver.club || ((props.publicTournament?.leagueId ?? store.currentTournament?.leagueId) ? silver.coach : '') || '', bgClass: 'silver' })
     }
     if (semiRound !== undefined) {
       for (const semi of byRound.get(semiRound) ?? []) {
         if (!semi.winnerId) continue
         const loserId = semi.athlete1Id === semi.winnerId ? semi.athlete2Id : semi.athlete1Id
         const bronze = loserId ? am.get(loserId) : null
-        if (bronze) standings.push({ key: 'b' + bronze.id, medal: '🥉', name: bronze.name, club: bronze.club || (store.currentTournament?.leagueId ? bronze.coach : '') || '', bgClass: 'bronze' })
+        if (bronze) standings.push({ key: 'b' + bronze.id, medal: '🥉', name: bronze.name, club: bronze.club || ((props.publicTournament?.leagueId ?? store.currentTournament?.leagueId) ? bronze.coach : '') || '', bgClass: 'bronze' })
       }
     }
 

@@ -1,11 +1,11 @@
 <template>
   <p v-if="printError" role="alert" class="no-print rounded-xl bg-rose-50 p-4 text-sm text-rose-700">{{ printError }}</p>
   <!-- دکمه اصلی چاپ -->
-  <div class="no-print fixed bottom-6 left-6 z-50 flex flex-wrap gap-2">
+  <div class="no-print flex flex-wrap gap-2" :class="publicTournament ? 'mb-4' : 'fixed bottom-6 left-6 z-50'">
   <button
       type="button"
       class="rounded-xl bg-slate-900 px-5 py-3 text-sm font-bold text-white shadow-xl transition hover:-translate-y-0.5 hover:bg-slate-800"
-      @click="print(true)"
+      @click="print()"
       :disabled="!pages.length"
   >
     🖨️
@@ -15,14 +15,26 @@
           : `خروجی PDF ${getWeightLabel(selectedCategory)}`
     }}
   </button>
-  <button type="button" class="rounded-xl border border-slate-300 bg-white px-5 py-3 text-sm font-bold text-slate-800 shadow-xl transition hover:bg-slate-100" :disabled="!pages.length" @click="print(false)">🖨️ چاپ براکت بدون شمارهٔ بازی</button>
   </div>
 
   <div
       id="bracket-print-root"
       class="min-h-screen bg-slate-100 p-4 font-sans"
+      :class="{ 'public-bracket': publicTournament }"
       dir="rtl"
   >
+    <section v-if="publicTournament && pages.length" class="no-print public-player-finder" aria-label="پیدا کردن بازی بازیکن">
+      <div class="finder-heading"><div><h2>بازی‌های بازیکن خود را پیدا کنید</h2><p>نام بازیکن را بنویسید تا شمارهٔ بازی، حریف و مسیر بعدی او را ببینید.</p></div><span aria-hidden="true">⌕</span></div>
+      <div class="finder-search"><label for="bracket-player-search">نام بازیکن</label><input id="bracket-player-search" v-model="playerQuery" type="search" placeholder="نام بازیکن را جستجو کنید…" autocomplete="off"></div>
+      <div v-if="playerQuery && !selectedPlayer" class="finder-choices" aria-label="بازیکنان پیدا شده">
+        <button v-for="player in matchingPlayers" :key="player.id" type="button" @click="selectPlayer(player.id)"><strong>{{ player.name }}</strong><span>{{ player.club || player.coach || 'آزاد' }} · وزن {{ playerWeight(player.id) }}</span></button>
+        <p v-if="!matchingPlayers.length">بازیکنی با این نام در جدول پیدا نشد.</p>
+      </div>
+      <div v-if="selectedPlayer" class="player-route">
+        <div class="route-heading"><div><strong>{{ selectedPlayer.name }}</strong><span>{{ selectedPlayer.club || selectedPlayer.coach || 'آزاد' }} · وزن {{ playerWeight(selectedPlayer.id) }}</span></div><button type="button" @click="clearPlayer">پاک کردن انتخاب</button></div>
+        <div class="route-games"><article v-for="match in playerMatches" :key="match.id"><strong>{{ match.isBye ? 'استراحت' : matchTag(match) }}</strong><div><b>{{ routeOpponent(match) }}</b><span>{{ match.isBye ? 'صعود بدون بازی' : match.winnerId ? match.winnerId === selectedPlayer.id ? 'پیروزی' : 'پایان‌یافته' : 'در انتظار نتیجه' }}</span></div><small>{{ match.nextMatchId ? 'بازی بعدی: ' + nextMatchTag(match.nextMatchId) : 'مرحله پایانی' }}</small></article><p v-if="!playerMatches.length">بازی این بازیکن هنوز در جدول ثبت نشده است.</p></div>
+      </div>
+    </section>
     <div class="no-print print-intro">
       <div><h2>جدول مسابقات برای چاپ و نصب</h2><p>A4 افقی · جدول ۳۲ نفره · نام بازیکن و باشگاه</p></div>
       <span>{{ toFaNumber(pages.length) }} صفحه آماده چاپ</span>
@@ -135,7 +147,8 @@
       </header>
 
       <!-- براکت اصلی -->
-      <div class="bracket-scroll-container">
+      <div v-if="publicTournament" class="no-print public-bracket-guide"><span>برای دیدن همهٔ بازی‌ها، جدول را به چپ و راست بکشید.</span><div><button type="button" @click="scrollBracket($event,-1)" aria-label="حرکت به راست جدول">→</button><button type="button" @click="scrollBracket($event,1)" aria-label="حرکت به چپ جدول">←</button></div></div>
+      <div class="bracket-scroll-container" :tabindex="publicTournament ? 0 : undefined" :role="publicTournament ? 'region' : undefined" :aria-label="publicTournament ? 'جدول بازی‌های وزن ' + page.cat : undefined">
         <div
             class="bracket-stage"
             :class="`size-${page.displaySize}`"
@@ -175,7 +188,7 @@
                       :match="match"
                       :athletes="athletes"
                       :show-meta="!match.isBye"
-                      :show-number="showMatchNumbers"
+                      :show-number="true"
                       :placeholder1="page.slotLabels?.[match.id]?.athlete1"
                       :placeholder2="page.slotLabels?.[match.id]?.athlete2"
                   />
@@ -216,7 +229,7 @@
                       :athletes="athletes"
                       :is-final="true"
                       :show-meta="!page.data.final.isBye"
-                      :show-number="showMatchNumbers"
+                      :show-number="true"
                       :placeholder1="page.slotLabels?.[page.data.final.id]?.athlete1"
                       :placeholder2="page.slotLabels?.[page.data.final.id]?.athlete2"
                   />
@@ -328,7 +341,7 @@
                       :match="match"
                       :athletes="athletes"
                       :show-meta="!match.isBye"
-                      :show-number="showMatchNumbers"
+                      :show-number="true"
                       :placeholder1="page.slotLabels?.[match.id]?.athlete1"
                       :placeholder2="page.slotLabels?.[match.id]?.athlete2"
                   />
@@ -356,8 +369,10 @@ import {
   type CSSProperties,
   type PropType,
 } from 'vue'
+import { normalizeText } from '../utils/athleteImport'
 
 import { useTournamentStore } from '../stores/tournament'
+import type { Tournament } from '../types'
 import { savedSession } from '../webApi'
 import {
   buildBracketColumns,
@@ -442,10 +457,11 @@ type BracketPage = {
   groupTotal?: number
 }
 
+const props = defineProps<{ publicTournament?: Tournament }>()
 const store = useTournamentStore()
 const printError = ref('')
 const printBusy = ref(false)
-const t = computed(() => store.currentTournament)
+const t = computed(() => props.publicTournament ?? store.currentTournament)
 
 const athletes = computed<AthleteLike[]>(
     () => t.value?.athletes ?? []
@@ -596,7 +612,28 @@ const officialCategories = computed<string[]>(() => {
 })
 
 const selectedCategory = ref<string>('all')
-const showMatchNumbers = ref(true)
+const playerQuery = ref('')
+const selectedPlayerId = ref<string | null>(null)
+const selectedPlayer = computed(() => athletes.value.find(player => player.id === selectedPlayerId.value) ?? null)
+const matchingPlayers = computed(() => {
+  const query = normalizeText(playerQuery.value)
+  if (!query) return []
+  return athletes.value.filter(player => normalizeText(player.name ?? player.fullName ?? '').includes(query)).slice(0, 12)
+})
+const playerMatches = computed(() => (t.value?.matches ?? []).filter(match => match.athlete1Id === selectedPlayerId.value || match.athlete2Id === selectedPlayerId.value).sort((a,b) => a.round-b.round || a.order-b.order))
+function playerWeight(id: string): string { return t.value?.athletes.find(a => a.id === id)?.weightCategory ?? 'نامشخص' }
+function selectPlayer(id: string) { selectedPlayerId.value = id; const weight = playerWeight(id); if (weight !== 'نامشخص') selectedCategory.value = weight }
+function clearPlayer() { selectedPlayerId.value = null; playerQuery.value = '' }
+function routeOpponent(match: MatchLike): string {
+  const otherId = match.athlete1Id === selectedPlayerId.value ? match.athlete2Id : match.athlete1Id
+  if (match.isBye) return 'استراحت'
+  return athletes.value.find(player => player.id === otherId)?.name || 'حریف هنوز مشخص نشده'
+}
+function nextMatchTag(id: string): string { const next = t.value?.matches.find(match => match.id === id); return next ? matchTag(next) : 'در انتظار تعیین' }
+function scrollBracket(event: MouseEvent, direction: number) {
+  const section = (event.currentTarget as HTMLElement).closest('.category-page')
+  section?.querySelector('.bracket-scroll-container')?.scrollBy({left:direction * 360,behavior:'smooth'})
+}
 
 function isTrueBye(match: MatchLike): boolean {
   if (match.isBye === true) {
@@ -1287,16 +1324,15 @@ function getWeightLabel(category: string): string {
 }
 
 
-async function print(numbered = true): Promise<void> {
+async function print(): Promise<void> {
   if (!await refreshPrintData()) return
-  showMatchNumbers.value = numbered
   await document.fonts.ready
   await nextTick()
 
   requestAnimationFrame(() => {
     requestAnimationFrame(() => {
       document.body.classList.add('bracket-print-mode')
-      window.addEventListener('afterprint', () => { document.body.classList.remove('bracket-print-mode'); showMatchNumbers.value = true }, { once: true })
+      window.addEventListener('afterprint', () => { document.body.classList.remove('bracket-print-mode') }, { once: true })
       window.print()
     })
   })
@@ -1337,6 +1373,7 @@ async function printCategory(
 
 async function refreshPrintData(): Promise<boolean> {
   if (printBusy.value || !t.value) return false
+  if (props.publicTournament) return true
   printBusy.value = true
   printError.value = ''
   try {
@@ -2457,4 +2494,58 @@ async function refreshPrintData(): Promise<boolean> {
 #bracket-print-root .left-flow .round-column:first-child .athlete-details { width:calc(100% - 9mm); margin-right:9mm; }
 #bracket-print-root .right-flow .round-column:last-child .athlete-details { width:calc(100% - 9mm); margin-left:9mm; }
 #bracket-print-root .bracket-stage .match-tag { padding:.4mm; }
+.public-player-finder { margin-bottom:18px; padding:20px; border:1px solid #d7e7e2; border-radius:18px; background:linear-gradient(145deg,#f1faf6,#fff 70%); color:#233c3b; }
+.finder-heading { display:flex; align-items:start; justify-content:space-between; gap:14px; }
+.finder-heading h2 { font-size:18px; font-weight:900; }
+.finder-heading p { margin-top:5px; color:#5b7370; font-size:13px; }
+.finder-heading>span { display:grid; place-items:center; width:38px; height:38px; flex-shrink:0; border-radius:11px; background:#dff2e9; color:#197862; font-size:26px; }
+.finder-search { margin-top:17px; }
+.finder-search label { display:block; margin-bottom:6px; font-size:13px; font-weight:800; }
+.finder-search input { width:100%; min-height:44px; padding:9px 12px; border:1px solid #bfcfcf; border-radius:10px; background:#fff; font:inherit; font-size:15px; }
+.finder-search input:focus-visible, .finder-choices button:focus-visible, .public-bracket-guide button:focus-visible { outline:3px solid #4cae98; outline-offset:2px; }
+.finder-choices { display:grid; grid-template-columns:repeat(auto-fit,minmax(min(100%,210px),1fr)); gap:8px; margin-top:12px; }
+.finder-choices button { display:flex; flex-direction:column; gap:3px; padding:10px 12px; border:1px solid #dce8e5; border-radius:10px; background:#fff; text-align:right; }
+.finder-choices button:hover { border-color:#2d957d; background:#f7fcfa; }
+.finder-choices strong { font-size:14px; color:#243b3a; }
+.finder-choices span, .finder-choices p { font-size:12px; color:#647c79; }
+.player-route { margin-top:16px; border-top:1px solid #dbeae5; padding-top:14px; }
+.route-heading { display:flex; align-items:start; justify-content:space-between; gap:10px; flex-wrap:wrap; }
+.route-heading>div { display:flex; flex-direction:column; gap:2px; }
+.route-heading strong { font-size:16px; }
+.route-heading span { font-size:12px; color:#5b7370; }
+.route-heading button { border:1px solid #d5e5df; border-radius:9px; background:#fff; padding:7px 10px; color:#246f5f; font-size:12px; }
+.route-games { display:flex; flex-wrap:wrap; gap:10px; margin-top:12px; }
+.route-games article { display:flex; align-items:center; gap:11px; flex:1 1 230px; min-width:0; padding:11px; border:1px solid #dce9e4; border-radius:11px; background:#fff; }
+.route-games article>strong { display:grid; place-items:center; min-width:48px; min-height:42px; padding:5px; border-radius:8px; background:#e5f3ef; color:#1c7060; font-size:15px; direction:ltr; }
+.route-games article>div { display:flex; flex:1; flex-direction:column; min-width:0; }
+.route-games b { font-size:13px; overflow-wrap:anywhere; }
+.route-games span, .route-games small, .route-games>p { font-size:11px; color:#5f7773; }
+.route-games small { max-width:98px; }
+.public-bracket-guide { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:10px 14px; background:#ecf5f2; color:#316658; font-size:13px; }
+.public-bracket-guide>div { display:flex; gap:6px; }
+.public-bracket-guide button { display:grid; place-items:center; width:36px; height:36px; border:1px solid #bdd9ce; border-radius:9px; background:#fff; color:#227563; font-size:19px; }
+@media screen and (max-width:640px) {
+  .public-player-finder { padding:15px; }
+  .finder-heading h2 { font-size:16px; }
+  .finder-heading p { font-size:12px; }
+  .route-games article { flex-basis:100%; }
+  .public-bracket-guide { font-size:12px; }
+  #bracket-print-root .bracket-scroll-container { overflow-x:auto; }
+}
+@media screen {
+  #bracket-print-root.public-bracket { min-width:0; max-width:100%; padding:12px; border-radius:16px; }
+  #bracket-print-root.public-bracket .category-page { width:100%; max-width:100%; overflow:hidden; border:1px solid #dce6ea; border-radius:12px; }
+  #bracket-print-root.public-bracket .pdf-header { display:flex; height:auto; flex-wrap:wrap; gap:10px; padding:15px; }
+  #bracket-print-root.public-bracket .header-center { flex-basis:100%; min-width:0; order:-1; }
+  #bracket-print-root.public-bracket .header-title { white-space:normal; overflow-wrap:anywhere; font-size:17px; }
+  #bracket-print-root.public-bracket .header-side { flex-wrap:wrap; }
+  #bracket-print-root.public-bracket .bracket-scroll-container { max-width:100%; overflow-x:auto; overscroll-behavior-x:contain; }
+  #bracket-print-root.public-bracket .bracket-stage { --column-width:200px; --final-column-width:210px; --column-gap:18px; --card-height:120px; --row-height:130px; width:max-content; min-width:max-content; height:auto; min-height:var(--track-height); }
+  #bracket-print-root.public-bracket .round-column { --column-width:200px; }
+  #bracket-print-root.public-bracket .bracket-stage .athlete-name,
+  #bracket-print-root.public-bracket .bracket-stage .athlete-placeholder { font-size:14px; line-height:1.4; }
+  #bracket-print-root.public-bracket .bracket-stage .athlete-affiliation { font-size:12px; line-height:1.3; }
+  #bracket-print-root.public-bracket .bracket-stage .match-tag { font-size:14px; }
+  #bracket-print-root.public-bracket .bracket-page-footer { white-space:normal; flex-wrap:wrap; }
+}
 </style>

@@ -1,23 +1,25 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import type { Match, RoundScore, WinType } from '../types'
+import type { Athlete, Match, RoundScore, WinType } from '../types'
 import { useTournamentStore } from '../stores/tournament'
 
-const props = defineProps<{ match: Match }>()
+const props = defineProps<{ match: Match; publicAthletes?: Athlete[]; publicMatches?: Match[] }>()
 
-function displayOrder(value: number | string | null | undefined) {
-  const num = Number(value)
-  return Number.isFinite(num) && num > 0 ? num : 'استراحت'
+function displayOrder(match: Match) {
+  const assigned = Number(match.matchNumber)
+  if (match.matchNumber != null && Number.isFinite(assigned) && assigned > 0) return assigned
+  const order = Number(match.order)
+  return match.isBye ? 'استراحت' : Number.isFinite(order) ? Math.max(1, order) : 'نامشخص'
 }
 
 function displayCourt(value: number | string | null | undefined) {
   const num = Number(value)
-  return Number.isFinite(num) && num > 0 ? num : 'استراحت'
+  return Number.isFinite(num) && num > 0 ? num : 'نامشخص'
 }
 
 const store = useTournamentStore()
-const athletes = computed(() => store.currentTournament?.athletes ?? [])
-const allMatches = computed(() => store.currentTournament?.matches ?? [])
+const athletes = computed(() => props.publicAthletes ?? store.currentTournament?.athletes ?? [])
+const allMatches = computed(() => props.publicMatches ?? store.currentTournament?.matches ?? [])
 const isFinal = computed(() => props.match.side === 'final')
 
 function athleteId(s: number) {
@@ -121,7 +123,7 @@ const matchSummary = computed(() => {
 <template>
   <div class="flex flex-col items-center gap-0.5">
     <div class="text-[8px] font-bold text-white bg-blue-600 rounded-md px-1.5 py-px self-start mr-1">
-      بازی {{ displayOrder(match.order) }}
+      بازی {{ displayOrder(match) }}
     </div>
 
     <div class="w-[120px] border border-slate-200 rounded-md overflow-hidden bg-white shadow-sm relative"
@@ -152,7 +154,7 @@ const matchSummary = computed(() => {
 
     <div v-if="nextInfo && match.winnerId"
          class="text-[8px] text-blue-600 bg-blue-50 border border-blue-200 rounded px-1.5 py-px text-center w-[120px]">
-      ← زمین {{ displayCourt(nextInfo.court) }} | بازی {{ displayOrder(nextInfo.order) }}
+      ← زمین {{ displayCourt(nextInfo.court) }} | بازی {{ displayOrder(nextInfo) }}
     </div>
   </div>
 </template>
