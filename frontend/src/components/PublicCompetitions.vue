@@ -2,6 +2,8 @@
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import LiveScores from './LiveScores.vue'
 import WeightLeaders from './WeightLeaders.vue'
+import StandingsPage from './StandingsPage.vue'
+import type { Match as BracketMatch } from '../types'
 
 type Athlete={id:string;name:string;club:string;weightCategory:string}
 type Match={id:string;athlete1Id:string|null;athlete2Id:string|null;winnerId:string|null;court:number;order:number;matchNumber:number|null;status:string;round:number;side:string;weightCategory:string;nextMatchId:string|null;isBye:boolean;result:null|{winType:string;rounds:{winner?:string}[]}}
@@ -37,13 +39,12 @@ onUnmounted(()=>{stopped=true;controller?.abort();clearTimeout(timer);window.rem
 const names=computed(()=>new Map(detail.value?.athletes.map(a=>[a.id,a])??[]))
 const weights=computed(()=>[...new Set(detail.value?.matches.map(m=>m.weightCategory)??[])])
 const matches=computed(()=>(detail.value?.matches??[]).filter(m=>!weight.value||m.weightCategory===weight.value))
-const rounds=computed(()=>[...new Set(matches.value.map(m=>m.round))].sort((a,b)=>a-b))
+const publicTournament=computed(()=>detail.value?{athletes:detail.value.athletes,matches:detail.value.matches.map(m=>({ ...m, matchNumber:m.matchNumber&&m.matchNumber>0?m.matchNumber:Math.max(1,m.order), order:Math.max(1,m.order) })) as unknown as BracketMatch[],leagueId:detail.value.rankingScope==='league'?'league':null}:undefined)
 const results=computed(()=>matches.value.filter(m=>!m.isBye).sort((a,b)=>({ongoing:0,completed:1,pending:2}[a.status]??2)-({ongoing:0,completed:1,pending:2}[b.status]??2)||(a.matchNumber??a.order)-(b.matchNumber??b.order)))
 const ranking=computed(()=>detail.value?.standings[tab.value==='teams'?'teams':'players']??[])
-const number=(m:Match)=>m.matchNumber??m.order
+const number=(m:Match)=>m.matchNumber&&m.matchNumber>0?m.matchNumber:Math.max(1,m.order)
 const status=(m:Match)=>m.isBye?'استراحت':m.status==='completed'?'پایان‌یافته':m.status==='ongoing'?'در حال برگزاری':'در انتظار'
 function participant(m:Match,slot:1|2){const athlete=names.value.get((slot===1?m.athlete1Id:m.athlete2Id)||'');if(athlete)return athlete.name;return m.isBye?'استراحت':'در انتظار صعود'}
-function nextLabel(m:Match){const next=detail.value?.matches.find(n=>n.id===m.nextMatchId);return next?`صعود به مبارزه ${number(next)}`:m.side==='final'?'فینال':''}
 function score(m:Match){if(!m.result)return '—';const rounds=m.result.rounds??[];const b=rounds.filter(r=>r.winner==='blue').length,r=rounds.filter(r=>r.winner==='red').length;return `${b} – ${r} · ${m.result.winType}`}
 const dateLabel=(value:string)=>new Date(value).toLocaleDateString('fa-IR')
 </script>
@@ -68,13 +69,9 @@ const dateLabel=(value:string)=>new Date(value).toLocaleDateString('fa-IR')
         <LiveScores :tournament-id="detail.id" :names="names" />
         <section class="rounded-2xl border border-slate-200 bg-white p-6"><p class="text-sm text-teal-700">{{detail.leagueName||'تورنومنت'}}</p><h1 class="mt-2 text-2xl font-black">{{detail.name}}</h1><p class="mt-3 text-sm text-slate-500">{{dateLabel(detail.date)}} · {{detail.ageCategory}} · {{detail.gender==='male'?'مردان':'زنان'}} · {{detail.courts}} زمین</p><div class="mt-5 flex flex-wrap items-center gap-3"><a :href="`/ovr?tournamentId=${detail.id}`" target="_blank" rel="noopener" class="rounded-xl bg-slate-900 px-5 py-2.5 text-sm text-white">نمایش OVR زمین‌ها ↗</a><span class="text-xs" :class="error?'text-rose-600':'text-teal-700'">{{error?'ارتباط قطع شده؛ اطلاعات ممکن است قدیمی باشد':`به‌روزرسانی خودکار هر ۵ ثانیه · ${updated}`}}</span></div></section>
         <nav class="flex gap-2 overflow-x-auto pb-1" aria-label="بخش‌های مسابقه"><button v-for="item in tabs" :key="item.id" :aria-pressed="tab===item.id" class="whitespace-nowrap rounded-xl px-5 py-3 text-sm font-bold" :class="tab===item.id?'bg-teal-700 text-white':'border border-slate-200 bg-white text-slate-600'" @click="selectTab(item.id)">{{item.label}}</button></nav>
-        <label v-if="tab==='bracket'||tab==='results'" class="flex items-center gap-3 text-sm">وزن<select v-model="weight" class="rounded-lg border bg-white px-4 py-2"><option value="">همه وزن‌ها</option><option v-for="w in weights" :key="w" :value="w">{{w}}</option></select></label>
+        <label v-if="tab==='results'" class="flex items-center gap-3 text-sm">وزن<select v-model="weight" class="rounded-lg border bg-white px-4 py-2"><option value="">همه وزن‌ها</option><option v-for="w in weights" :key="w" :value="w">{{w}}</option></select></label>
         <template v-if="tab==='bracket'">
-          <p class="text-xs text-slate-500">شمارهٔ هر مبارزه و شمارهٔ مبارزهٔ بعدی روی کارت درج شده است.</p>
-          <div v-if="matches.length" class="flex gap-5 overflow-x-auto pb-4">
-            <section v-for="round in rounds" :key="round" class="w-72 shrink-0 space-y-4"><h2 class="font-bold">دور {{round}}</h2><article v-for="m in matches.filter(m=>m.round===round).sort((a,b)=>number(a)-number(b))" :key="m.id" class="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm"><header class="flex items-center justify-between bg-slate-100 px-4 py-2 text-xs"><strong>مبارزه {{number(m)}}</strong><span>زمین {{m.court}} · {{m.weightCategory}}</span></header><div class="border-r-4 border-blue-600 p-3 text-sm" :class="m.winnerId===m.athlete1Id&&m.winnerId?'bg-emerald-50 font-bold':''">{{participant(m,1)}} <small class="block text-slate-500">{{names.get(m.athlete1Id||'')?.club}}</small> <span v-if="m.winnerId&&m.winnerId===m.athlete1Id">✓</span></div><div class="border-r-4 border-rose-600 p-3 text-sm" :class="m.winnerId===m.athlete2Id&&m.winnerId?'bg-emerald-50 font-bold':''">{{participant(m,2)}} <small class="block text-slate-500">{{names.get(m.athlete2Id||'')?.club}}</small> <span v-if="m.winnerId&&m.winnerId===m.athlete2Id">✓</span></div><footer class="space-y-1 border-t px-4 py-2 text-xs text-slate-500"><p>{{status(m)}} <span v-if="m.result" dir="ltr">{{score(m)}}</span></p><p>{{nextLabel(m)}}</p></footer></article></section>
-          </div>
-          <p v-else class="rounded-xl border border-dashed p-8 text-center">جدول این مسابقه هنوز آماده نشده است.</p>
+          <StandingsPage :public-tournament="publicTournament" />
         </template>
         <div v-else-if="tab==='results'" class="overflow-x-auto rounded-xl border bg-white"><table class="w-full whitespace-nowrap text-right text-sm"><thead class="bg-slate-100"><tr><th class="p-4">شماره / زمین</th><th class="p-4">آبی</th><th class="p-4">قرمز</th><th class="p-4">وزن</th><th class="p-4">نتیجه راندها (آبی–قرمز)</th><th class="p-4">برنده / وضعیت</th></tr></thead><tbody><tr v-for="m in results" :key="m.id" class="border-t"><td class="p-4">{{number(m)}} / {{m.court}}</td><td class="p-4 text-blue-700">{{participant(m,1)}}</td><td class="p-4 text-rose-700">{{participant(m,2)}}</td><td class="p-4" dir="ltr">{{m.weightCategory}}</td><td class="p-4" dir="ltr">{{score(m)}}</td><td class="p-4"><b v-if="m.winnerId">{{names.get(m.winnerId)?.name}}</b><div class="text-xs text-slate-500">{{status(m)}}</div></td></tr><tr v-if="!results.length"><td colspan="6" class="p-8 text-center text-slate-500">مبارزه‌ای برای نمایش وجود ندارد.</td></tr></tbody></table></div>
         <template v-else>

@@ -82,9 +82,9 @@ func (a *API) publicCompetition(r *Request) (any, error) {
 	for _, m := range t.Matches {
 		var result any
 		if m.Result != nil {
-			result = gin.H{"winType": m.Result.WinType, "winnerCorner": m.Result.WinnerCorner, "rounds": m.Result.Rounds}
+			result = gin.H{"winType": m.Result.WinType, "winnerCorner": m.Result.WinnerCorner, "blueId": m.Result.BlueID, "redId": m.Result.RedID, "rounds": m.Result.Rounds}
 		}
-		matches = append(matches, gin.H{"id": m.ID, "athlete1Id": m.Athlete1ID, "athlete2Id": m.Athlete2ID, "winnerId": m.WinnerID, "court": m.Court, "order": m.Order, "matchNumber": m.MatchNumber, "status": m.Status, "round": m.Round, "side": m.Side, "weightCategory": m.WeightCategory, "nextMatchId": m.NextMatchID, "nextSlot": m.NextSlot, "isBye": m.IsBye, "result": result})
+		matches = append(matches, gin.H{"id": m.ID, "athlete1Id": m.Athlete1ID, "athlete2Id": m.Athlete2ID, "winnerId": m.WinnerID, "court": m.Court, "order": m.Order, "matchNumber": m.MatchNumber, "bracketIndex": m.BracketIndex, "status": m.Status, "round": m.Round, "side": m.Side, "weightCategory": m.WeightCategory, "nextMatchId": m.NextMatchID, "nextSlot": m.NextSlot, "isBye": m.IsBye, "result": result})
 	}
 	cfg := leagues.DefaultScoring()
 	scope := "tournament"
