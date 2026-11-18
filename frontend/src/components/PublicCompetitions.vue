@@ -15,21 +15,19 @@ type Competition={id:string;name:string;date:string;gender:string;ageCategory:st
 type Detail=Competition&{athletes:Athlete[];matches:Match[];standings:{players:Standing[];teams:Standing[]};rankingScope:string;scoring:{gold:number;silver:number;bronze:number;winPoint:number;weighInPoint:number;countWin:boolean;countWeighIn:boolean}}
 const id=location.pathname.split('/').filter(Boolean)[1]||''
 const tabs=[{id:'bracket',label:'جدول و شماره‌ها'},{id:'results',label:'نتایج لحظه‌ای'},{id:'players',label:'رنکینگ بازیکنان'},{id:'teams',label:'رنکینگ تیم‌ها'}]
-const initial=new URLSearchParams(location.search).get('tab')||'bracket'
-const tab=ref(tabs.some(t=>t.id===initial)?initial:'bracket')
+const initial=new URLSearchParams(location.search).get('tab')||'results'
+const tab=ref(tabs.some(t=>t.id===initial)?initial:'results')
 const items=ref<Competition[]>([]), detail=ref<Detail|null>(null), loading=ref(true), error=ref(''), query=ref(''), hasMore=ref(false), weight=ref(''), updated=ref('')
 const today=ref(tehranDate()), personQuery=ref('')
 const submittedQuery=ref('')
 let dateTimer:ReturnType<typeof setInterval>|undefined
 const period=(date:string)=>competitionPeriod(date,today.value)
 const todayItems=computed(()=>items.value.filter(item=>period(item.date)==='today'))
-const otherItems=computed(()=>items.value.filter(item=>period(item.date)!=='today'))
 const listSections=computed(()=>[
   {key:'today',title:'مسابقات امروز',hint:'جدول و نتایج مسابقه‌های امروز را از اینجا دنبال کنید.',items:todayItems.value},
-  {key:'other',title:'دیگر مسابقات',hint:'مسابقات پیش رو و نتایج روزهای گذشته',items:otherItems.value},
 ].filter(section=>section.items.length))
 const periodLabel=(date:string)=>({today:'امروز',upcoming:'پیش رو',past:'روزهای گذشته'}[period(date)])
-const competitionLink=(value:string,section='bracket')=>`/competitions/${encodeURIComponent(value)}?tab=${section}`
+const competitionLink=(value:string,section='results')=>`/competitions/${encodeURIComponent(value)}?tab=${section}`
 const contains=(values:(string|undefined)[])=>normalizeText(values.filter(Boolean).join(' ')).includes(normalizeText(personQuery.value))
 let timer:number|undefined, controller:AbortController|undefined, stopped=false, sequence=0
 async function load(append=false){
@@ -50,7 +48,7 @@ async function load(append=false){
 }
 async function poll(){await load();if(!stopped)timer=window.setTimeout(poll,5000)}
 function selectTab(value:string){tab.value=value;history.replaceState({},'',`${location.pathname}?tab=${value}`)}
-const onPop=()=>{const value=new URLSearchParams(location.search).get('tab');tab.value=tabs.some(t=>t.id===value)?value!:'bracket'}
+const onPop=()=>{const value=new URLSearchParams(location.search).get('tab');tab.value=tabs.some(t=>t.id===value)?value!:'results'}
 onMounted(()=>{if(id)void poll();else void load();window.addEventListener('popstate',onPop);dateTimer=setInterval(()=>{const day=tehranDate();if(day!==today.value){today.value=day;void load()}},60000)})
 onUnmounted(()=>{stopped=true;controller?.abort();clearTimeout(timer);clearInterval(dateTimer);window.removeEventListener('popstate',onPop)})
 const names=computed(()=>new Map(detail.value?.athletes.map(a=>[a.id,a])??[]))
@@ -72,26 +70,12 @@ const dateLabel=(value:string)=>new Date(value.slice(0,10)+'T12:00:00+03:30').to
     <header class="site-header">
       <div class="page-width header-inner">
         <a href="/competitions" class="brand"><span class="brand-mark" aria-hidden="true">TKD</span><span>مسابقات تکواندو<small>همراه شما، کنار زمین</small></span></a>
-        <a v-if="id" href="/competitions" class="back-link">همه مسابقات ←</a>
+        <a v-if="id" href="/competitions" class="back-link">مسابقات امروز ←</a>
         <span v-else class="header-note">جدول‌ها · نتایج · رتبه‌بندی</span>
       </div>
     </header>
     <main class="page-width main-content">
       <template v-if="!id">
-        <section class="welcome">
-          <div><span class="eyebrow">برای بازیکن‌ها، مربی‌ها و خانواده‌ها</span><h1>مسابقه را از نزدیک<br><span>دنبال کنید.</span></h1><p>مسابقه‌تان را پیدا کنید؛ جدول بازی‌ها، امتیازهای زنده و جایگاه تیم و بازیکن‌ها همین‌جاست.</p></div>
-          <div class="welcome-aside">
-            <div class="bracket-art" aria-hidden="true"><svg viewBox="0 0 320 150" fill="none"><path d="M20 30h65v35h60m-125 55h65V85h60m155-55h-65v35h-60m125 55h-65V85h-60" stroke="#a9c7d8" stroke-width="2"/><g fill="#edf5ff" stroke="#afc9e9"><rect x="8" y="16" width="52" height="28" rx="8"/><rect x="8" y="106" width="52" height="28" rx="8"/><rect x="260" y="16" width="52" height="28" rx="8"/><rect x="260" y="106" width="52" height="28" rx="8"/></g><circle cx="160" cy="75" r="33" fill="#e1f3eb" stroke="#85baa9"/><path d="M147 57h26v11c0 17-26 17-26 0V57Zm0 4h-8v6c0 7 8 9 12 9m22-15h8v6c0 7-8 9-12 9m-9 7v10m-10 0h20" stroke="#247c69" stroke-width="2.5" stroke-linecap="round"/><g fill="#6e9ac6"><circle cx="25" cy="30" r="4"/><circle cx="25" cy="120" r="4"/><circle cx="277" cy="30" r="4"/><circle cx="277" cy="120" r="4"/></g></svg><span>از اولین بازی تا فینال</span></div>
-            <div class="today-date"><PublicIcon name="calendar"/><span>امروز · {{dateLabel(today)}}</span></div>
-            <a v-if="todayItems.length" href="#today-competitions" class="text-link">مشاهده مسابقات امروز ↓</a>
-          </div>
-        </section>
-        <section class="guide-cards" aria-label="راهنمای دنبال کردن مسابقات">
-          <article><span class="feature-icon"><PublicIcon name="bracket"/></span><div><h2>مسیر بازیکن شما</h2><p>جدول را باز کنید و حریف‌ها و مسیر صعود تا فینال را ببینید.</p></div><span class="guide-number" aria-hidden="true">۰۱</span></article>
-          <article><span class="feature-icon blue-icon"><PublicIcon name="results"/></span><div><h2>همراه با هر امتیاز</h2><p>نتایج بازی‌ها و امتیازهای در حال ثبت را دنبال کنید.</p></div><span class="guide-number" aria-hidden="true">۰۲</span></article>
-          <article><span class="feature-icon purple-icon"><PublicIcon name="teams"/></span><div><h2>کنار تیم محبوبتان</h2><p>جایگاه بازیکن‌ها، تیم‌ها و مدال‌هایشان را پیدا کنید.</p></div><span class="guide-number" aria-hidden="true">۰۳</span></article>
-        </section>
-        <form class="search-panel" role="search" @submit.prevent="load()"><label for="competition-search">دنبال کدام مسابقه هستید؟</label><div class="search-row"><input id="competition-search" v-model="query" type="search" placeholder="نام مسابقه یا لیگ را بنویسید…"><button class="primary-button" :disabled="loading">جستجو</button></div></form>
         <section v-for="section in listSections" :id="section.key==='today'?'today-competitions':undefined" :key="section.key" class="competition-section">
           <div class="section-heading"><div><h2><span v-if="section.key==='today'" class="today-dot" aria-hidden="true"></span>{{section.title}}</h2><p>{{section.hint}}</p></div><span class="count-badge">{{section.items.length.toLocaleString('fa-IR')}} مسابقه</span></div>
           <div class="competition-grid"><article v-for="item in section.items" :key="item.id" class="competition-card" :class="{'today-card':section.key==='today'}">
@@ -100,11 +84,11 @@ const dateLabel=(value:string)=>new Date(value.slice(0,10)+'T12:00:00+03:30').to
             <p class="event-date"><PublicIcon name="calendar"/>{{dateLabel(item.date)}}</p>
             <div class="event-tags"><span>{{item.ageCategory}}</span><span>{{item.gender==='male'?'پسران / آقایان':'دختران / بانوان'}}</span><span>{{item.courts.toLocaleString('fa-IR')}} زمین</span></div>
             <p v-if="item.organizer" class="organizer">برگزارکننده: {{item.organizer}}</p>
-            <div class="card-actions"><a :href="competitionLink(item.id)" class="primary-button">جدول مسابقه ←</a><a :href="competitionLink(item.id,'results')" class="secondary-button">نتایج بازی‌ها</a></div>
+            <div class="card-actions"><a :href="competitionLink(item.id)" class="primary-button">ورود به مسابقه ←</a><a :href="competitionLink(item.id,'bracket')" class="secondary-button">جدول مسابقه</a></div>
             <div class="card-shortcuts"><a :href="competitionLink(item.id,'players')"><PublicIcon name="players"/>رتبهٔ بازیکن‌ها</a><a :href="competitionLink(item.id,'teams')"><PublicIcon name="teams"/>رتبهٔ تیم‌ها</a></div>
           </article></div>
         </section>
-        <div v-if="!loading&&!error&&!items.length" class="empty-state"><strong>مسابقه‌ای پیدا نشد</strong><p>نام کوتاه‌تر یا نام لیگ را جستجو کنید.</p><button v-if="query" class="secondary-button" @click="query='';load()">نمایش همه مسابقات</button></div>
+        <div v-if="!loading&&!error&&!todayItems.length" class="empty-state"><strong>امروز مسابقه‌ای ثبت نشده است</strong><p>مسابقات روز پس از ثبت برگزارکننده اینجا نمایش داده می‌شوند.</p><button v-if="query" class="secondary-button" @click="query='';load()">نمایش همه مسابقات</button></div>
         <div v-if="hasMore" class="load-more"><button :disabled="loading" class="secondary-button" @click="load(true)">نمایش مسابقات بیشتر ↓</button></div>
       </template>
       <template v-else-if="detail">
@@ -114,7 +98,7 @@ const dateLabel=(value:string)=>new Date(value.slice(0,10)+'T12:00:00+03:30').to
           <div class="event-summary"><div class="event-stats"><span><b>{{detail.athletes.length.toLocaleString('fa-IR')}}</b> بازیکن</span><span><b>{{detail.courts.toLocaleString('fa-IR')}}</b> زمین</span><span><b>{{completed.toLocaleString('fa-IR')}}</b> بازی پایان‌یافته</span></div><a :href="'/ovr?tournamentId='+encodeURIComponent(detail.id)" target="_blank" rel="noopener" class="secondary-button">نمایشگر زمین‌ها (OVR) ↗</a></div>
           <p class="update-status" :class="{'connection-error':error}"><span class="status-dot" aria-hidden="true"></span>{{error?'ارتباط قطع شده؛ اطلاعات ممکن است قدیمی باشد':'به‌روزرسانی خودکار · آخرین دریافت '+updated}}</p>
         </section>
-        <LiveScores :tournament-id="detail.id" :names="names" />
+        <LiveScores :tournament-id="detail.id" :names="names" :matches="detail.matches" :courts="detail.courts" />
         <nav class="competition-tabs" aria-label="بخش‌های مسابقه"><button v-for="item in tabs" :key="item.id" :aria-pressed="tab===item.id" :class="{'selected':tab===item.id}" @click="selectTab(item.id)"><PublicIcon :name="item.id" class="tab-icon"/>{{item.label}}<span>{{item.id==='bracket'?'مسیر رسیدن به فینال':item.id==='results'?'بازی‌ها و برنده‌ها':item.id==='players'?'امتیاز و مدال بازیکن‌ها':'جایگاه تیم‌ها و باشگاه‌ها'}}</span></button></nav>
         <div v-if="tab!=='bracket'" class="filter-panel"><label class="person-search" for="person-search">{{tab==='teams'?'تیم خود را پیدا کنید':'بازیکن خود را پیدا کنید'}}<input id="person-search" v-model="personQuery" type="search" :placeholder="tab==='teams'?'نام تیم یا باشگاه…':'نام بازیکن، تیم یا مربی…'"></label><label v-if="tab!=='teams'" for="weight-filter">دستهٔ وزنی<select id="weight-filter" v-model="weight"><option value="">همه وزن‌ها</option><option v-for="w in weights" :key="w" :value="w">{{w}}</option></select></label><button v-if="personQuery||weight" class="text-link" @click="personQuery='';weight=''">پاک کردن فیلترها</button></div>
         <template v-if="tab==='bracket'"><BracketPdfExport :public-tournament="publicTournament" /></template>
@@ -331,4 +315,16 @@ td{font-size:13px}
 @media print{.site-header,.site-footer,.welcome,.competition-tabs,.filter-panel,.event-heading{display:none}
 .public-hub{background:white}
 .main-content{padding:0;width:100%}}
+
+.event-heading .eyebrow,.event-kind{font-size:18px;font-weight:800;color:#176759}
+@media(max-width:640px){
+.main-content{gap:16px;padding-top:16px}
+.event-heading{padding:16px}
+.event-heading h1{font-size:25px;line-height:1.65;margin:8px 0}
+.event-summary{margin-top:12px;padding-top:12px;gap:10px}
+.event-summary>.secondary-button{width:auto;min-height:36px;font-size:11px;padding:6px 10px}
+.event-heading .update-status{margin-top:10px}
+.competition-tabs button span{display:none}
+.competition-tabs button{min-height:44px}
+}
 </style>
