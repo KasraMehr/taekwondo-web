@@ -258,9 +258,10 @@ type profileInput struct {
 	Email        *string `json:"email"`
 	ClubID       *string `json:"clubId"`
 	UserID       *string `json:"userId"`
+	PhotoData    *string `json:"photoData"`
 }
 
-const profileJSON = `jsonb_build_object('id',a.id,'name',a.name,'nationalCode',a.national_code,'birthDate',a.birth_date,'gender',a.gender,'phone',a.phone,'email',a.email,'clubId',a.club_id,'userId',a.user_id,'isActive',a.is_active)`
+const profileJSON = `jsonb_build_object('id',a.id,'name',a.name,'nationalCode',a.national_code,'birthDate',a.birth_date,'gender',a.gender,'phone',a.phone,'email',a.email,'clubId',a.club_id,'userId',a.user_id,'photoData',a.photo_data,'isActive',a.is_active)`
 const profileAccess = `( $3 IN ('owner','manager','admin','organizer') OR a.user_id=$2 OR ($3='coach' AND EXISTS(SELECT 1 FROM clubs c WHERE c.id=a.club_id AND c.organization_id=a.organization_id AND c.coach_id=$2)))`
 
 func (r *Request) canUseClub(id *string) error {
@@ -331,8 +332,18 @@ func (a *API) profileRoutes(org *gin.RouterGroup) {
 		}
 		limit, offset := 200, 0
 		var err error
-		if value := r.C.Query("limit"); value != "" { limit, err = strconv.Atoi(value); if err != nil || limit < 1 || limit > 200 { return nil, bad("limit must be 1..200") } }
-		if value := r.C.Query("offset"); value != "" { offset, err = strconv.Atoi(value); if err != nil || offset < 0 { return nil, bad("invalid offset") } }
+		if value := r.C.Query("limit"); value != "" {
+			limit, err = strconv.Atoi(value)
+			if err != nil || limit < 1 || limit > 200 {
+				return nil, bad("limit must be 1..200")
+			}
+		}
+		if value := r.C.Query("offset"); value != "" {
+			offset, err = strconv.Atoi(value)
+			if err != nil || offset < 0 {
+				return nil, bad("invalid offset")
+			}
+		}
 		return listJSON(r, `SELECT `+profileJSON+` FROM athletes a WHERE organization_id=$1 AND `+profileAccess+` AND ($6='' OR strpos(lower(a.name),lower($6))>0) ORDER BY a.name,a.id LIMIT $4 OFFSET $5`, r.OrganizationID, r.UserID, r.Role, limit, offset, strings.TrimSpace(r.C.Query("search")))
 	}))
 	org.GET("/athletes/:athlete", a.route(true, true, func(r *Request) (any, error) {
@@ -354,6 +365,9 @@ func (a *API) profileRoutes(org *gin.RouterGroup) {
 			}
 			if strings.TrimSpace(in.Name) == "" || len(in.Name) > 100 || (in.Gender != "male" && in.Gender != "female") {
 				return nil, bad("name and valid gender are required")
+			}
+			if in.PhotoData != nil && (len(*in.PhotoData) > 1024*1024 || !strings.HasPrefix(*in.PhotoData, "data:image/jpeg;base64,") && !strings.HasPrefix(*in.PhotoData, "data:image/png;base64,")) {
+				return nil, bad("photo must be a JPEG or PNG data URL under 1 MB")
 			}
 			if r.Role == "athlete" {
 				in.UserID = &r.UserID
@@ -384,12 +398,12 @@ func (a *API) profileRoutes(org *gin.RouterGroup) {
 				if r.Role == "coach" || r.Role == "athlete" {
 					in.UserID = existingUser
 				}
-				return oneJSON(r, `UPDATE athletes a SET name=$3,national_code=$4,birth_date=$5,gender=$6,phone=$7,email=$8,club_id=$9,user_id=$10,updated_at=now() WHERE id=$1 AND organization_id=$2 RETURNING `+profileJSON, r.C.Param("athlete"), r.OrganizationID, strings.TrimSpace(in.Name), in.NationalCode, in.BirthDate, in.Gender, in.Phone, in.Email, in.ClubID, in.UserID)
+				return oneJSON(r, `UPDATE athletes a SET name=$3,national_code=$4,birth_date=$5,gender=$6,phone=$7,email=$8,club_id=$9,user_id=$10,photo_data=COALESCE($11,photo_data),updated_at=now() WHERE id=$1 AND organization_id=$2 RETURNING `+profileJSON, r.C.Param("athlete"), r.OrganizationID, strings.TrimSpace(in.Name), in.NationalCode, in.BirthDate, in.Gender, in.Phone, in.Email, in.ClubID, in.UserID, in.PhotoData)
 			}
 			if r.Role == "coach" && in.UserID != nil {
 				return nil, bad("only an organizer can link another account")
 			}
-			return oneJSON(r, `INSERT INTO athletes AS a(id,organization_id,name,national_code,birth_date,gender,phone,email,club_id,user_id) VALUES(gen_random_uuid(),$1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING `+profileJSON, r.OrganizationID, strings.TrimSpace(in.Name), in.NationalCode, in.BirthDate, in.Gender, in.Phone, in.Email, in.ClubID, in.UserID)
+			return oneJSON(r, `INSERT INTO athletes AS a(id,organization_id,name,national_code,birth_date,gender,phone,email,club_id,user_id,photo_data) VALUES(gen_random_uuid(),$1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING `+profileJSON, r.OrganizationID, strings.TrimSpace(in.Name), in.NationalCode, in.BirthDate, in.Gender, in.Phone, in.Email, in.ClubID, in.UserID, in.PhotoData)
 		}
 	}
 	org.POST("/athletes", a.route(true, true, save(false)))

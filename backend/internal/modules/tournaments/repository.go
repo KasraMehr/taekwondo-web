@@ -81,8 +81,8 @@ func (r *tournamentRepository) Create(ctx context.Context, t *Tournament) error 
 }
 func (r *tournamentRepository) GetByID(ctx context.Context, id string) (*Tournament, error) {
 	t := &Tournament{}
-	err := r.db.QueryRow(ctx, `SELECT id::text,name,event_date,courts,gender,age_category,format,court_assignment,elimination_matches,league_id::text,stage_order,week_id::text,group_id::text,created_at,updated_at,revision,settings FROM tournaments WHERE id=$1 AND organization_id=$2 FOR UPDATE`, id, r.organizationID).Scan(
-		&t.ID, &t.Name, &t.Date, &t.Courts, &t.Gender, &t.AgeCategory, &t.Format, &t.CourtAssignment, &t.EliminationMatches, &t.LeagueID, &t.StageOrder, &t.WeekID, &t.GroupID, &t.CreatedAt, &t.UpdatedAt, &t.Revision, &t.Settings)
+	err := r.db.QueryRow(ctx, `SELECT id::text,name,event_date,courts,gender,age_category,format,court_assignment,elimination_matches,league_id::text,stage_order,week_id::text,group_id::text,created_at,updated_at,revision,settings,weigh_in_at FROM tournaments WHERE id=$1 AND organization_id=$2 FOR UPDATE`, id, r.organizationID).Scan(
+		&t.ID, &t.Name, &t.Date, &t.Courts, &t.Gender, &t.AgeCategory, &t.Format, &t.CourtAssignment, &t.EliminationMatches, &t.LeagueID, &t.StageOrder, &t.WeekID, &t.GroupID, &t.CreatedAt, &t.UpdatedAt, &t.Revision, &t.Settings, &t.WeighInAt)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, ErrTournamentNotFound
 	}

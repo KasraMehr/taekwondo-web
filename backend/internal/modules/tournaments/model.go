@@ -149,6 +149,7 @@ const (
 )
 
 type Tournament struct {
+	WeighInAt          *time.Time          `json:"weighInAt,omitempty"`
 	Settings           *TournamentSettings `json:"settings,omitempty"`
 	Revision           int64               `json:"revision"`
 	ID                 string              `json:"id"`
