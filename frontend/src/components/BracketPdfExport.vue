@@ -35,7 +35,7 @@
         <div class="route-games"><article v-for="match in playerMatches" :key="match.id"><strong>{{ match.isBye ? 'استراحت' : matchTag(match) }}</strong><div><b>{{ routeOpponent(match) }}</b><span>{{ match.isBye ? 'صعود بدون بازی' : match.winnerId ? match.winnerId === selectedPlayer.id ? 'پیروزی' : 'پایان‌یافته' : 'در انتظار نتیجه' }}</span></div><small>{{ match.nextMatchId ? 'بازی بعدی: ' + nextMatchTag(match.nextMatchId) : 'مرحله پایانی' }}</small></article><p v-if="!playerMatches.length">بازی این بازیکن هنوز در جدول ثبت نشده است.</p></div>
       </div>
     </section>
-    <div class="no-print print-intro">
+    <div v-if="!publicTournament" class="no-print print-intro">
       <div><h2>جدول مسابقات برای چاپ و نصب</h2><p>A4 افقی · جدول ۳۲ نفره · نام بازیکن و باشگاه</p></div>
       <span>{{ toFaNumber(pages.length) }} صفحه آماده چاپ</span>
       <p class="print-intro-note">شناسهٔ هر بازی از حرف زمین و شمارهٔ بازی تشکیل شده است؛ مثلاً A20. جایگاه‌های مراحل بعد برای ثبت صعود بازیکنان خالی می‌مانند.</p>
@@ -147,7 +147,7 @@
       </header>
 
       <!-- براکت اصلی -->
-      <div v-if="publicTournament" class="no-print public-bracket-guide"><span>برای دیدن همهٔ بازی‌ها، جدول را به چپ و راست بکشید.</span><div><button type="button" @click="scrollBracket($event,-1)" aria-label="حرکت به راست جدول">→</button><button type="button" @click="scrollBracket($event,1)" aria-label="حرکت به چپ جدول">←</button></div></div>
+      <div v-if="publicTournament" class="no-print public-bracket-guide"><span>برای دیدن همهٔ بازی‌ها، داخل کادر جدول به طرفین و بالا و پایین حرکت کنید.</span><div><button type="button" @click="scrollBracket($event,1)" aria-label="حرکت به راست جدول">→</button><button type="button" @click="scrollBracket($event,-1)" aria-label="حرکت به چپ جدول">←</button></div></div>
       <div class="bracket-scroll-container" :tabindex="publicTournament ? 0 : undefined" :role="publicTournament ? 'region' : undefined" :aria-label="publicTournament ? 'جدول بازی‌های وزن ' + page.cat : undefined">
         <div
             class="bracket-stage"
@@ -2547,5 +2547,18 @@ async function refreshPrintData(): Promise<boolean> {
   #bracket-print-root.public-bracket .bracket-stage .athlete-affiliation { font-size:12px; line-height:1.3; }
   #bracket-print-root.public-bracket .bracket-stage .match-tag { font-size:14px; }
   #bracket-print-root.public-bracket .bracket-page-footer { white-space:normal; flex-wrap:wrap; }
+}
+
+@media screen {
+#bracket-print-root.public-bracket{min-height:0;background:#fff}
+#bracket-print-root.public-bracket .bracket-stage{grid-template-columns:max-content var(--final-column-width) max-content;padding-inline:16px}
+#bracket-print-root.public-bracket .bracket-stage.size-2{grid-template-columns:var(--final-column-width)}
+#bracket-print-root.public-bracket .bracket-stage .round-column{--column-width:200px}
+#bracket-print-root.public-bracket .bracket-scroll-container{max-height:65vh;overflow:auto;scrollbar-gutter:stable;border-block:1px solid #dce6ea}
+}
+@media screen and (max-width:640px){
+#bracket-print-root.public-bracket{padding:0}
+#bracket-print-root.public-bracket .bracket-scroll-container{max-height:55vh}
+.public-player-finder{padding:14px}
 }
 </style>
