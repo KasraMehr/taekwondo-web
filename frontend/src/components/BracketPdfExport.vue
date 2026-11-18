@@ -358,6 +358,7 @@ import {
 } from 'vue'
 
 import { useTournamentStore } from '../stores/tournament'
+import type { Tournament } from '../types'
 import { savedSession } from '../webApi'
 import {
   buildBracketColumns,
@@ -442,10 +443,11 @@ type BracketPage = {
   groupTotal?: number
 }
 
+const props = defineProps<{ publicTournament?: Tournament }>()
 const store = useTournamentStore()
 const printError = ref('')
 const printBusy = ref(false)
-const t = computed(() => store.currentTournament)
+const t = computed(() => props.publicTournament ?? store.currentTournament)
 
 const athletes = computed<AthleteLike[]>(
     () => t.value?.athletes ?? []
@@ -1337,6 +1339,7 @@ async function printCategory(
 
 async function refreshPrintData(): Promise<boolean> {
   if (printBusy.value || !t.value) return false
+  if (props.publicTournament) return true
   printBusy.value = true
   printError.value = ''
   try {

@@ -2,8 +2,8 @@
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import LiveScores from './LiveScores.vue'
 import WeightLeaders from './WeightLeaders.vue'
-import StandingsPage from './StandingsPage.vue'
-import type { Match as BracketMatch } from '../types'
+import BracketPdfExport from './BracketPdfExport.vue'
+import type { Match as BracketMatch, Tournament } from '../types'
 
 type Athlete={id:string;name:string;club:string;weightCategory:string}
 type Match={id:string;athlete1Id:string|null;athlete2Id:string|null;winnerId:string|null;court:number;order:number;matchNumber:number|null;status:string;round:number;side:string;weightCategory:string;nextMatchId:string|null;isBye:boolean;result:null|{winType:string;rounds:{winner?:string}[]}}
@@ -39,7 +39,7 @@ onUnmounted(()=>{stopped=true;controller?.abort();clearTimeout(timer);window.rem
 const names=computed(()=>new Map(detail.value?.athletes.map(a=>[a.id,a])??[]))
 const weights=computed(()=>[...new Set(detail.value?.matches.map(m=>m.weightCategory)??[])])
 const matches=computed(()=>(detail.value?.matches??[]).filter(m=>!weight.value||m.weightCategory===weight.value))
-const publicTournament=computed(()=>detail.value?{athletes:detail.value.athletes,matches:detail.value.matches.map(m=>({ ...m, matchNumber:m.matchNumber&&m.matchNumber>0?m.matchNumber:Math.max(1,m.order), order:Math.max(1,m.order) })) as unknown as BracketMatch[],leagueId:detail.value.rankingScope==='league'?'league':null}:undefined)
+const publicTournament=computed(()=>detail.value?{...detail.value,matches:detail.value.matches.map(m=>({ ...m, matchNumber:m.matchNumber&&m.matchNumber>0?m.matchNumber:Math.max(1,m.order), order:Math.max(1,m.order) })) as unknown as BracketMatch[],leagueId:detail.value.rankingScope==='league'?'league':null} as unknown as Tournament:undefined)
 const results=computed(()=>matches.value.filter(m=>!m.isBye).sort((a,b)=>({ongoing:0,completed:1,pending:2}[a.status]??2)-({ongoing:0,completed:1,pending:2}[b.status]??2)||(a.matchNumber??a.order)-(b.matchNumber??b.order)))
 const ranking=computed(()=>detail.value?.standings[tab.value==='teams'?'teams':'players']??[])
 const number=(m:Match)=>m.matchNumber&&m.matchNumber>0?m.matchNumber:Math.max(1,m.order)
@@ -71,7 +71,7 @@ const dateLabel=(value:string)=>new Date(value).toLocaleDateString('fa-IR')
         <nav class="flex gap-2 overflow-x-auto pb-1" aria-label="بخش‌های مسابقه"><button v-for="item in tabs" :key="item.id" :aria-pressed="tab===item.id" class="whitespace-nowrap rounded-xl px-5 py-3 text-sm font-bold" :class="tab===item.id?'bg-teal-700 text-white':'border border-slate-200 bg-white text-slate-600'" @click="selectTab(item.id)">{{item.label}}</button></nav>
         <label v-if="tab==='results'" class="flex items-center gap-3 text-sm">وزن<select v-model="weight" class="rounded-lg border bg-white px-4 py-2"><option value="">همه وزن‌ها</option><option v-for="w in weights" :key="w" :value="w">{{w}}</option></select></label>
         <template v-if="tab==='bracket'">
-          <StandingsPage :public-tournament="publicTournament" />
+          <BracketPdfExport :public-tournament="publicTournament" />
         </template>
         <div v-else-if="tab==='results'" class="overflow-x-auto rounded-xl border bg-white"><table class="w-full whitespace-nowrap text-right text-sm"><thead class="bg-slate-100"><tr><th class="p-4">شماره / زمین</th><th class="p-4">آبی</th><th class="p-4">قرمز</th><th class="p-4">وزن</th><th class="p-4">نتیجه راندها (آبی–قرمز)</th><th class="p-4">برنده / وضعیت</th></tr></thead><tbody><tr v-for="m in results" :key="m.id" class="border-t"><td class="p-4">{{number(m)}} / {{m.court}}</td><td class="p-4 text-blue-700">{{participant(m,1)}}</td><td class="p-4 text-rose-700">{{participant(m,2)}}</td><td class="p-4" dir="ltr">{{m.weightCategory}}</td><td class="p-4" dir="ltr">{{score(m)}}</td><td class="p-4"><b v-if="m.winnerId">{{names.get(m.winnerId)?.name}}</b><div class="text-xs text-slate-500">{{status(m)}}</div></td></tr><tr v-if="!results.length"><td colspan="6" class="p-8 text-center text-slate-500">مبارزه‌ای برای نمایش وجود ندارد.</td></tr></tbody></table></div>
         <template v-else>
