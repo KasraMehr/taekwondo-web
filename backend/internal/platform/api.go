@@ -214,7 +214,7 @@ func writeError(c *gin.Context, err error) {
 		if errors.Is(err, leagues.ErrInvalid) {
 			status, message = 400, err.Error()
 		}
-		if errors.Is(err, leagues.ErrRosterLocked) || errors.Is(err, leagues.ErrIncomplete) {
+		if errors.Is(err, leagues.ErrStructureLocked) || errors.Is(err, leagues.ErrRosterLocked) || errors.Is(err, leagues.ErrIncomplete) {
 			status, message = 409, err.Error()
 		}
 		invalid := []error{tournaments.ErrInvalidTournamentInput, tournaments.ErrInvalidTournamentContext, tournaments.ErrInvalidTournamentDate, tournaments.ErrInvalidTournamentEnum, tournaments.ErrInvalidWeight, tournaments.ErrInvalidSignature, tournaments.ErrInvalidCourt, tournaments.ErrInvalidMatchPosition}
