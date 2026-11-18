@@ -14,6 +14,7 @@ import PoomsaeLeaguePage from './components/Poomsae/PoomsaeLeaguePage.vue'
 import TeamTournamentPage from './components/TeamTournoment/TeamTournamentPage.vue'
 import { loadWebLeagues, loadWebTournaments, loginWeb, savedSession, saveSession } from './webApi'
 import PublicOVR from './components/PublicOVR.vue'
+import PublicCompetitions from './components/PublicCompetitions.vue'
 import WeighInOVR from './components/WeighInOVR.vue'
 import AthletePortal from './components/AthletePortal.vue'
 import { webApi } from './webApi'
@@ -30,6 +31,7 @@ const form = reactive({ email: '', password: '' })
 const portal = ref<any>(null)
 async function refreshPortal(){ portal.value = await webApi().call('/athlete-portal') }
 const isPublicOVR = /^\/ovr(?:\/[1-9]\d*)?\/?$/i.test(location.pathname)
+const isPublicCompetitions = /^\/competitions(?:\/[^/]+)?\/?$/i.test(location.pathname)
 const isWeighInOVR = /^\/ovr\/weigh-in(?:\/[1-9]\d*)?\/?$/i.test(location.pathname)
 function applyUrl(){
   const parts=location.pathname.split('/').filter(Boolean)
@@ -56,7 +58,7 @@ async function hydrate(){
 }
 async function submitLogin(){loading.value=true;error.value='';try{session.value=await loginWeb(form.email,form.password);await hydrate()}catch(e:any){error.value=e?.message||'ورود ناموفق بود'}finally{loading.value=false}}
 function logout(){if(poomsaeStore.dirtyCount&&!confirm('نمرهٔ ذخیره‌نشده دارید. بدون ذخیره خارج می‌شوید؟'))return;poomsaeStore.reset();saveSession(null);session.value=null;portal.value=null;error.value='';ui.goHome()}
-onMounted(()=>{if(session.value && !isPublicOVR && !isWeighInOVR)hydrate()})
+onMounted(()=>{if(session.value && !isPublicOVR && !isWeighInOVR && !isPublicCompetitions)hydrate()})
 onMounted(()=>window.addEventListener('popstate',applyUrl))
 function beforeLeave(e:BeforeUnloadEvent){if(poomsaeStore.dirtyCount){e.preventDefault();e.returnValue=''}}
 onMounted(()=>window.addEventListener('beforeunload',beforeLeave))
@@ -65,7 +67,8 @@ watch([()=>ui.page,()=>ui.tab,()=>ui.leagueTab,()=>ui.poomsaeLeagueId,()=>ui.poo
 </script>
 
 <template>
-  <WeighInOVR v-if="isWeighInOVR" />
+  <PublicCompetitions v-if="isPublicCompetitions" />
+  <WeighInOVR v-else-if="isWeighInOVR" />
   <PublicOVR v-else-if="isPublicOVR" />
   <div v-else-if="!session" class="flex min-h-screen items-center justify-center bg-slate-100 px-4 text-slate-800">
     <form class="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-7 shadow-xl" @submit.prevent="submitLogin">
@@ -74,13 +77,14 @@ watch([()=>ui.page,()=>ui.tab,()=>ui.leagueTab,()=>ui.poomsaeLeagueId,()=>ui.poo
       <label class="mb-4 block text-sm font-medium">رمز عبور<input v-model="form.password" class="input mt-1" type="password" required></label>
       <p v-if="error" class="mb-3 rounded-lg bg-red-50 p-3 text-sm text-red-700">{{ error }}</p>
       <button class="w-full rounded-lg bg-blue-600 py-2.5 font-medium text-white hover:bg-blue-700 disabled:opacity-60" :disabled="loading">{{ loading?'در حال ورود…':'ورود' }}</button>
+      <a href="/competitions" class="mt-5 block text-center text-sm font-bold text-teal-700">مشاهده عمومی مسابقات، جدول‌ها و نتایج ←</a>
     </form>
   </div>
   <div v-else class="min-h-screen bg-slate-100 text-slate-800">
     <header v-if="portal?.role !== 'athlete'" class="bg-slate-900 text-white shadow-lg">
       <div class="mx-auto flex max-w-6xl items-center justify-between px-6 py-4">
         <h1 class="text-xl font-bold">🥋 قرعه‌کشی مسابقات تکواندو</h1>
-        <div class="flex items-center gap-2"><button v-if="ui.page !== 'home'" @click="ui.goHome()"
+        <div class="flex items-center gap-2"><a href="/competitions" class="rounded-lg bg-teal-700 px-3 py-2 text-sm">مسابقات عمومی</a><button v-if="ui.page !== 'home'" @click="ui.goHome()"
                 class="rounded-lg bg-slate-700 px-4 py-2 text-sm transition hover:bg-slate-600">
           → بازگشت به لیست مسابقات
         </button><button @click="logout" class="rounded-lg border border-slate-600 px-3 py-2 text-sm hover:bg-slate-800">خروج</button></div>

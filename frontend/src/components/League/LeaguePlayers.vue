@@ -2,6 +2,7 @@
 import { computed, onMounted } from "vue";
 import { useLeagueStore } from "../../stores/league";
 import { loadWebLeagues } from "../../webApi";
+import WeightLeaders from '../WeightLeaders.vue'
 
 const leagueStore = useLeagueStore();
 const currentLeague = computed(() => leagueStore.currentLeague);
@@ -16,6 +17,7 @@ const playerRankings = computed(() => {
 <template>
   <div>
     <h3 class="mb-4 text-lg font-bold">👤 رده‌بندی ورزشکاران</h3>
+    <WeightLeaders :players="playerRankings" />
 
     <div v-if="playerRankings.length === 0" class="rounded-2xl border-2 border-dashed border-slate-300 bg-white py-16 text-center">
       <p class="text-slate-500">هنوز امتیازی ثبت نشده است</p>
