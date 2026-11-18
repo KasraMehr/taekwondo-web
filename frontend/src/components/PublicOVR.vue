@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from 'vue'
-type Match={id:string;blueName:string;redName:string;weightCategory:string;side:string;status:string;matchNumber:number;round:number}
+import LiveScores from './LiveScores.vue'
+type Match={id:string;blueId?:string;redId?:string;blueName:string;redName:string;weightCategory:string;side:string;status:string;matchNumber:number;round:number}
 type Court={court:number;current:Match|null;upcoming:Match[]}
 const data=ref<{tournament:null|{id:string;name:string;courts:number;revision:number};courts:Court[]}>({tournament:null,courts:[]})
 const loading=ref(true);const error=ref('');const justUpdated=ref(false);let timer:number|undefined;let updateTimer:number|undefined
@@ -19,10 +20,12 @@ const clock=ref('');function tick(){clock.value=new Date().toLocaleTimeString('f
 const syncViewport=()=>{viewportHeight.value=window.innerHeight;viewportWidth.value=window.innerWidth}
 onMounted(()=>{load();tick();window.addEventListener('resize',syncViewport);timer=window.setInterval(()=>{load();tick()},2000)});onUnmounted(()=>{window.removeEventListener('resize',syncViewport);if(timer)clearInterval(timer);if(updateTimer)clearTimeout(updateTimer)})
 const hasMatches=computed(()=>data.value.courts.some(c=>c.current||c.upcoming.length))
+const liveNames=computed(()=>{const map=new Map<string,{name:string}>();for(const court of data.value.courts)for(const match of [court.current,...court.upcoming]){if(match?.blueId)map.set(match.blueId,{name:match.blueName});if(match?.redId)map.set(match.redId,{name:match.redName})}return map})
 </script>
 <template>
   <main dir="rtl" class="ovr-stage flex h-screen max-h-screen flex-col overflow-hidden p-2.5 text-white lg:p-4" :class="{'ovr-updated':justUpdated}">
     <header class="scoreboard-header relative z-10 mb-2.5 flex shrink-0 items-center justify-between gap-3 overflow-hidden rounded-xl border border-slate-700 px-4 py-2.5 lg:px-5"><div class="flex min-w-0 items-center gap-3"><div class="tkd-mark flex h-10 w-10 shrink-0 items-center justify-center rounded-lg text-sm font-black tracking-tighter">TKD</div><div class="min-w-0"><div class="text-[10px] font-bold tracking-widest text-slate-400 lg:text-xs">سامانه نمایش زمین مسابقات</div><h1 class="truncate text-lg font-black lg:text-2xl">{{data.tournament?.name||'در انتظار شروع تورنمنت'}}</h1></div></div><div class="flex shrink-0 items-center gap-2.5"><Transition name="flash"><span v-if="justUpdated" class="hidden rounded-md bg-emerald-500/15 px-2 py-1 text-[10px] font-bold text-emerald-300 sm:inline">به‌روز شد</span></Transition><div class="live-pill flex items-center gap-1.5 rounded-md border border-red-500/30 bg-red-500/10 px-2.5 py-1.5 text-xs font-bold text-red-300"><span class="h-2 w-2 animate-pulse rounded-full bg-red-500"></span>زنده</div><div class="text-lg font-black tabular-nums lg:text-2xl">{{clock}}</div></div></header>
+    <div v-if="data.tournament" class="mb-2 max-h-[35vh] shrink-0 overflow-y-auto"><LiveScores :tournament-id="data.tournament.id" :names="liveNames" /></div>
     <p v-if="error" class="mb-4 rounded-xl bg-rose-500/15 p-3 text-rose-200">{{error}}</p>
     <div v-if="loading" class="grid flex-1 place-items-center text-slate-400">در حال دریافت برنامه مسابقات…</div>
     <div v-else-if="!data.tournament||!hasMatches" class="grid flex-1 place-items-center"><div class="text-center"><div class="tkd-empty mx-auto grid h-20 w-20 place-items-center rounded-full text-xl font-black">TKD</div><h2 class="mt-4 text-2xl font-bold">مسابقه‌ای در صف اجرا نیست</h2><p class="mt-2 text-slate-400">با آماده‌شدن جدول مسابقات، اطلاعات زمین‌ها خودکار نمایش داده می‌شود.</p></div></div>

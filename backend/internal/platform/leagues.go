@@ -46,6 +46,9 @@ func (a *API) leagueRoutes(org *gin.RouterGroup) {
 		}
 		return r.LeagueService().ExportBackup(r.Context(), r.C.Param("league"))
 	}))
+	g.PUT("/:league", leagueBody(a, func(r *Request, in leagues.EditInput) (any, error) {
+		return r.LeagueService().Edit(r.Context(), r.C.Param("league"), in)
+	}))
 	g.PUT("/:league/settings", leagueBody(a, func(r *Request, in leagues.Settings) (any, error) {
 		return r.LeagueService().UpdateSettings(r.Context(), r.C.Param("league"), in)
 	}))

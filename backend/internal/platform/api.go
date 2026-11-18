@@ -214,7 +214,7 @@ func writeError(c *gin.Context, err error) {
 		if errors.Is(err, leagues.ErrInvalid) {
 			status, message = 400, err.Error()
 		}
-		if errors.Is(err, leagues.ErrRosterLocked) || errors.Is(err, leagues.ErrIncomplete) {
+		if errors.Is(err, leagues.ErrStructureLocked) || errors.Is(err, leagues.ErrRosterLocked) || errors.Is(err, leagues.ErrIncomplete) {
 			status, message = 409, err.Error()
 		}
 		invalid := []error{tournaments.ErrInvalidTournamentInput, tournaments.ErrInvalidTournamentContext, tournaments.ErrInvalidTournamentDate, tournaments.ErrInvalidTournamentEnum, tournaments.ErrInvalidWeight, tournaments.ErrInvalidSignature, tournaments.ErrInvalidCourt, tournaments.ErrInvalidMatchPosition}
@@ -309,6 +309,9 @@ func (a *API) Routes(router *gin.Engine) {
 	})
 	api.POST("/auth/login", a.route(false, false, a.login))
 	api.GET("/public/ovr", a.route(false, false, a.publicOVR))
+	api.GET("/public/competitions", a.route(false, false, a.publicCompetitions))
+	api.GET("/public/competitions/:tournament", a.route(false, false, a.publicCompetition))
+	api.GET("/public/competitions/:tournament/live", a.route(false, false, a.publicLiveScores))
 	api.GET("/public/weigh-in", a.route(false, false, a.publicWeighIn))
 	api.POST("/auth/logout", a.route(true, false, func(r *Request) (any, error) {
 		_, err := r.Tx.Exec(r.Context(), `DELETE FROM sessions WHERE token_hash=$1`, tokenHash(strings.TrimPrefix(r.C.GetHeader("Authorization"), "Bearer ")))
@@ -322,6 +325,9 @@ func (a *API) Routes(router *gin.Engine) {
 	a.organizationRoutes(api)
 	org := api.Group("/organizations/:org")
 	a.profileRoutes(org)
+	org.GET("/athlete-portal", a.route(true, true, a.athletePortal))
+	org.PUT("/athlete-portal/photo", a.route(true, true, a.saveOwnPhoto))
+	org.PUT("/tournaments/:tournament/weigh-in-time", a.route(true, true, a.saveWeighInTime))
 	a.tournamentRoutes(org)
 	a.leagueRoutes(org)
 	a.poomsaeRoutes(org)

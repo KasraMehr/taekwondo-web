@@ -134,6 +134,11 @@ func (s *Service) ImportBackup(ctx context.Context, in ImportBackupInput) (*Leag
 	if err != nil {
 		return nil, err
 	}
+	if b.League.StructureLocked {
+		if _, err = s.db.Exec(ctx, `UPDATE leagues SET structure_locked=true WHERE id=$1`, id); err != nil {
+			return nil, err
+		}
+	}
 	stageIDs, weekIDs, groupIDs, teamIDs, profileIDs, leagueAthleteIDs := map[string]string{}, map[string]string{}, map[string]string{}, map[string]string{}, map[string]string{}, map[string]string{}
 	for _, stage := range b.League.Stages {
 		if _, e := uuid.Parse(stage.ID); e != nil {

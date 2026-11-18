@@ -17,7 +17,7 @@ const players=computed(()=>{
   const scored=store.getPlayerRankings(league.value.id)
   const rows=league.value.athletes.filter(a=>a.isActive).map(a=>{
     const profileId=(a as typeof a&{profileId?:string}).profileId
-    return scored.find(row=>row.athleteId===profileId||row.name===a.name&&row.weightCategory===a.weightCategory)??{rank:0,athleteId:a.id,name:a.name,club:a.club??'آزاد',weightCategory:a.weightCategory??'',totalPoints:0,gold:0,silver:0,bronze:0,weighInPoints:0,winPoints:0,roundDiff:0,wins2_0:0,wins2_1:0,losses0_2:0,losses1_2:0,totalWins:0,totalLosses:0,groupId:a.groupId,groupName:league.value!.season.groups.find(g=>g.id===a.groupId)?.name}
+    return scored.find(row=>row.athleteId===profileId||row.name===a.name&&row.weightCategory===a.weightCategory)??{rank:0,athleteId:a.id,name:a.name,club:a.club||a.coachName||'آزاد',weightCategory:a.weightCategory??'',totalPoints:0,gold:0,silver:0,bronze:0,weighInPoints:0,winPoints:0,roundDiff:0,wins2_0:0,wins2_1:0,losses0_2:0,losses1_2:0,totalWins:0,totalLosses:0,groupId:a.groupId,groupName:league.value!.season.groups.find(g=>g.id===a.groupId)?.name}
   })
   return rows.sort((a,b)=>b.totalPoints-a.totalPoints||b.gold-a.gold||b.silver-a.silver||a.name.localeCompare(b.name,'fa')).map((row,i)=>({...row,rank:i+1}))
 })

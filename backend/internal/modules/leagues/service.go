@@ -91,6 +91,9 @@ func validateSettings(v Settings) error {
 }
 
 func (s *Service) UpdateSettings(ctx context.Context, id string, v Settings) (*League, error) {
+	if err := s.requireEditable(ctx, id); err != nil {
+		return nil, err
+	}
 	if v.SeasonName == "" {
 		current, err := s.Get(ctx, id)
 		if err != nil {
@@ -115,7 +118,7 @@ func (s *Service) UpdateSettings(ctx context.Context, id string, v Settings) (*L
 func (s *Service) Get(ctx context.Context, id string) (*League, error) {
 	l := &League{}
 	var cfg []byte
-	err := s.db.QueryRow(ctx, `SELECT id::text,name,gender,age_category,status,config,revision,created_at,updated_at FROM leagues WHERE id=$1 AND organization_id=$2`, id, s.organizationID).Scan(&l.ID, &l.Name, &l.Gender, &l.AgeCategory, &l.Status, &cfg, &l.Revision, &l.CreatedAt, &l.UpdatedAt)
+	err := s.db.QueryRow(ctx, `SELECT id::text,name,gender,age_category,status,config,revision,created_at,updated_at,structure_locked FROM leagues WHERE id=$1 AND organization_id=$2`, id, s.organizationID).Scan(&l.ID, &l.Name, &l.Gender, &l.AgeCategory, &l.Status, &cfg, &l.Revision, &l.CreatedAt, &l.UpdatedAt, &l.StructureLocked)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, ErrNotFound
 	}
@@ -252,6 +255,19 @@ func (s *Service) AddTeam(ctx context.Context, leagueID string, in AddTeamInput)
 }
 
 func (s *Service) UpdateTeam(ctx context.Context, leagueID, teamID string, in UpdateTeamInput) (*League, error) {
+	locked, err := s.structureLocked(ctx, leagueID)
+	if err != nil {
+		return nil, err
+	}
+	if locked {
+		var allowed bool
+		if err = s.db.QueryRow(ctx, `SELECT active=$3 AND (group_id IS NOT DISTINCT FROM $4::uuid OR (group_id IS NULL AND $4::uuid IS NOT NULL)) FROM league_teams WHERE league_id=$1 AND id=$2`, leagueID, teamID, in.Active, in.GroupID).Scan(&allowed); err != nil {
+			return nil, err
+		}
+		if !allowed {
+			return nil, ErrStructureLocked
+		}
+	}
 	tag, err := s.db.Exec(ctx, `UPDATE league_teams SET group_id=$3,active=$4 WHERE id=$1 AND league_id=$2`, teamID, leagueID, in.GroupID, in.Active)
 	if err != nil {
 		return nil, err
@@ -262,6 +278,9 @@ func (s *Service) UpdateTeam(ctx context.Context, leagueID, teamID string, in Up
 	return s.Get(ctx, leagueID)
 }
 func (s *Service) AddGroup(ctx context.Context, leagueID string, in AddGroupInput) (*League, error) {
+	if err := s.requireEditable(ctx, leagueID); err != nil {
+		return nil, err
+	}
 	in.Name = strings.TrimSpace(in.Name)
 	if in.Name == "" {
 		return nil, ErrInvalid
@@ -281,6 +300,9 @@ func (s *Service) AddGroup(ctx context.Context, leagueID string, in AddGroupInpu
 	return s.Get(ctx, leagueID)
 }
 func (s *Service) UpdateGroup(ctx context.Context, leagueID, groupID string, in UpdateGroupInput) (*League, error) {
+	if err := s.requireEditable(ctx, leagueID); err != nil {
+		return nil, err
+	}
 	in.Name = strings.TrimSpace(in.Name)
 	if in.Name == "" {
 		return nil, ErrInvalid
@@ -295,6 +317,9 @@ func (s *Service) UpdateGroup(ctx context.Context, leagueID, groupID string, in 
 	return s.Get(ctx, leagueID)
 }
 func (s *Service) RemoveGroup(ctx context.Context, leagueID, groupID string) (*League, error) {
+	if err := s.requireEditable(ctx, leagueID); err != nil {
+		return nil, err
+	}
 	if _, err := s.db.Exec(ctx, `UPDATE league_athletes SET group_id=NULL,updated_at=now() WHERE league_id=$1 AND group_id=$2`, leagueID, groupID); err != nil {
 		return nil, err
 	}
@@ -311,6 +336,9 @@ func (s *Service) RemoveGroup(ctx context.Context, leagueID, groupID string) (*L
 	return s.Get(ctx, leagueID)
 }
 func (s *Service) AddWeek(ctx context.Context, leagueID, stageID string, in AddWeekInput) (*League, error) {
+	if err := s.requireEditable(ctx, leagueID); err != nil {
+		return nil, err
+	}
 	in.Name = strings.TrimSpace(in.Name)
 	if in.Name == "" {
 		return nil, ErrInvalid
@@ -388,6 +416,9 @@ func (s *Service) CompleteStage(ctx context.Context, leagueID, stageID string) (
 }
 
 func (s *Service) AddAthlete(ctx context.Context, leagueID string, in AddAthleteInput) (*Athlete, error) {
+	if in.TeamID == nil && strings.TrimSpace(in.CoachName) == "" {
+		return nil, fmt.Errorf("%w: نام مربی برای بازیکن آزاد الزامی است", ErrInvalid)
+	}
 	if strings.TrimSpace(in.ProfileID) == "" {
 		in.Name = strings.TrimSpace(in.Name)
 		if in.Name == "" || (in.Gender != "male" && in.Gender != "female") {
@@ -443,6 +474,22 @@ func (s *Service) AddAthlete(ctx context.Context, leagueID string, in AddAthlete
 }
 
 func (s *Service) UpdateAthlete(ctx context.Context, leagueID, athleteID string, in UpdateAthleteInput) (*Athlete, error) {
+	if in.TeamID == nil && strings.TrimSpace(in.CoachName) == "" {
+		return nil, fmt.Errorf("%w: نام مربی برای بازیکن آزاد الزامی است", ErrInvalid)
+	}
+	locked, lockErr := s.structureLocked(ctx, leagueID)
+	if lockErr != nil {
+		return nil, lockErr
+	}
+	if locked {
+		var unchanged bool
+		if err := s.db.QueryRow(ctx, `SELECT team_id IS NOT DISTINCT FROM $3::uuid AND (group_id IS NOT DISTINCT FROM $4::uuid OR (team_id IS NULL AND group_id IS NULL AND $4::uuid IS NOT NULL)) AND weight_category=$5 AND ranking IS NOT DISTINCT FROM $6::int AND active=$7 FROM league_athletes WHERE id=$1 AND league_id=$2`, athleteID, leagueID, in.TeamID, in.GroupID, in.WeightCategory, in.Ranking, in.Active).Scan(&unchanged); err != nil {
+			return nil, err
+		}
+		if !unchanged {
+			return nil, ErrStructureLocked
+		}
+	}
 	var gender, age, club string
 	err := s.db.QueryRow(ctx, `SELECT gender,age_category FROM leagues WHERE id=$1 AND organization_id=$2`, leagueID, s.organizationID).Scan(&gender, &age)
 	if err != nil {
@@ -464,6 +511,13 @@ func (s *Service) UpdateAthlete(ctx context.Context, leagueID, athleteID string,
 	if tag.RowsAffected() == 0 {
 		return nil, ErrNotFound
 	}
+	// Refresh the displayed coach in tournament snapshots as well.
+	if _, err = s.db.Exec(ctx, `UPDATE tournaments SET revision=revision+1,updated_at=now() WHERE league_id=$1`, leagueID); err != nil {
+		return nil, err
+	}
+	if _, err = s.db.Exec(ctx, `UPDATE tournament_entries e SET data=jsonb_set(e.data,'{coach}',to_jsonb($3::text)) FROM tournaments t WHERE t.id=e.tournament_id AND t.league_id=$1 AND e.athlete_id=$2`, leagueID, athleteID, strings.TrimSpace(in.CoachName)); err != nil {
+		return nil, err
+	}
 	l, err := s.Get(ctx, leagueID)
 	if err != nil {
 		return nil, err
@@ -477,6 +531,9 @@ func (s *Service) UpdateAthlete(ctx context.Context, leagueID, athleteID string,
 }
 
 func (s *Service) RemoveAthlete(ctx context.Context, leagueID, athleteID string) error {
+	if err := s.requireEditable(ctx, leagueID); err != nil {
+		return err
+	}
 	tag, err := s.db.Exec(ctx, `UPDATE league_athletes SET active=false,updated_at=now() WHERE id=$1 AND league_id=$2`, athleteID, leagueID)
 	if err == nil && tag.RowsAffected() == 0 {
 		return ErrNotFound
@@ -544,6 +601,19 @@ func (s *Service) SyncRoster(ctx context.Context, leagueID, tournamentID string)
 		seeds = append(seeds, x)
 	}
 	rows.Close()
+	previous, err := s.previousWeekSeeds(ctx, t)
+	if err != nil {
+		return nil, err
+	}
+	for i := range seeds {
+		if ranks, ok := previous[seeds[i].weight]; ok {
+			seeds[i].ranking = nil
+			if rank, found := ranks[seeds[i].profile]; found {
+				value := rank
+				seeds[i].ranking = &value
+			}
+		}
+	}
 	existing := map[string]tournaments.TournamentAthlete{}
 	for _, a := range t.Athletes {
 		if a.ProfileID != nil {
@@ -551,11 +621,20 @@ func (s *Service) SyncRoster(ctx context.Context, leagueID, tournamentID string)
 		}
 	}
 	for _, x := range seeds {
-		if _, ok := existing[x.profile]; ok {
+		if old, ok := existing[x.profile]; ok {
+			// Refresh already-created, unlocked weeks as well as new snapshots.
+			if _, err = s.db.Exec(ctx, `UPDATE tournament_entries SET data=jsonb_set(jsonb_set(jsonb_set(data,'{ranking}',COALESCE(to_jsonb($3::int),'null'::jsonb)),'{coach}',to_jsonb($4::text)),'{club}',to_jsonb($5::text)) WHERE tournament_id=$1 AND athlete_id=$2`, t.ID, old.ID, x.ranking, x.coach, x.club); err != nil {
+				return nil, err
+			}
 			continue
 		}
 		pid := x.profile
-		_, err = ts.AddAthlete(ctx, t.ID, tournaments.AddAthleteInput{ID: x.id, ProfileID: &pid, Name: x.name, Club: x.club, Coach: x.coach, WeightCategory: x.weight, Ranking: x.ranking})
+		created, addErr := ts.AddAthlete(ctx, t.ID, tournaments.AddAthleteInput{ID: x.id, ProfileID: &pid, Name: x.name, Club: x.club, Coach: x.coach, WeightCategory: x.weight, Ranking: x.ranking})
+		if addErr != nil {
+			return nil, addErr
+		}
+		// League membership, not the global profile's club, determines this entry's affiliation.
+		_, err = s.db.Exec(ctx, `UPDATE tournament_entries SET data=jsonb_set(jsonb_set(data,'{club}',to_jsonb($3::text)),'{coach}',to_jsonb($4::text)) WHERE tournament_id=$1 AND athlete_id=$2`, t.ID, created.ID, x.club, x.coach)
 		if err != nil {
 			return nil, err
 		}
@@ -665,24 +744,27 @@ func (s *Service) Standings(ctx context.Context, leagueID string, stageID *strin
 	}
 	rows.Close()
 	playerGroups := map[string][2]string{}
-	groupRows, groupErr := s.db.Query(ctx, `SELECT la.profile_id::text,COALESCE(la.group_id,lt.group_id)::text,COALESCE(g.name,'') FROM league_athletes la LEFT JOIN league_teams lt ON lt.id=la.team_id LEFT JOIN league_groups g ON g.id=COALESCE(la.group_id,lt.group_id) AND g.league_id=la.league_id WHERE la.league_id=$1`, leagueID)
+	playerCoaches := map[string]string{}
+	groupRows, groupErr := s.db.Query(ctx, `SELECT la.profile_id::text,COALESCE(la.group_id,lt.group_id)::text,COALESCE(g.name,''),la.coach_name FROM league_athletes la LEFT JOIN league_teams lt ON lt.id=la.team_id LEFT JOIN league_groups g ON g.id=COALESCE(la.group_id,lt.group_id) AND g.league_id=la.league_id WHERE la.league_id=$1`, leagueID)
 	if groupErr != nil {
 		return nil, groupErr
 	}
 	for groupRows.Next() {
-		var profile string
+		var profile, coach string
 		var groupID *string
 		var name string
-		if err = groupRows.Scan(&profile, &groupID, &name); err != nil {
+		if err = groupRows.Scan(&profile, &groupID, &name, &coach); err != nil {
 			groupRows.Close()
 			return nil, err
 		}
+		playerCoaches[profile] = coach
 		if groupID != nil {
 			playerGroups[profile] = [2]string{*groupID, name}
 		}
 	}
 	groupRows.Close()
 	for i := range out.Players {
+		out.Players[i].CoachName = playerCoaches[out.Players[i].ID]
 		if group, ok := playerGroups[out.Players[i].ID]; ok {
 			out.Players[i].GroupID = group[0]
 			out.Players[i].GroupName = group[1]

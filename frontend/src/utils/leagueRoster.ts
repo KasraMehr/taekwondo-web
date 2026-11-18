@@ -13,6 +13,7 @@ export function tournamentSeedsForGroup(league: League, groupId: string | null):
     .map(a => ({
       sourceLeagueAthleteId: a.id,
       name: a.name.trim(),
+      coach: a.coachName ?? '',
       club: a.clubId ? clubs.get(a.clubId)?.name ?? a.club ?? '' : a.club ?? '',
       weightCategory: a.weightCategory!,
       ranking: undefined,

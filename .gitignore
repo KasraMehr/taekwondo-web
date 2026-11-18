@@ -1,4 +1,5 @@
 .test-postgres/
+.codex-tmp/
 .migration-backup/
 backend/.env
 backend/tmp/

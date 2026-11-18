@@ -1,5 +1,6 @@
 import test from 'node:test'
 import './poomsae.test'
+import './leagueAthleteExcel.test'
 import assert from 'node:assert/strict'
 import { createPinia, setActivePinia } from 'pinia'
 import { generateBracket, recordResult } from '../src/utils/bracket'
@@ -25,7 +26,7 @@ test('league roster, including inherited club group, is the tournament source of
     { id: 'la2', name: 'Inactive', clubId: 'c1', groupId: null, isActive: false, weightCategory: '-58' },
     { id: 'la3', name: 'No weight', clubId: 'c1', groupId: null, isActive: true, weightCategory: null },
   ] }
-  assert.deepEqual(tournamentSeedsForGroup(league, 'g1'), [{ sourceLeagueAthleteId: 'la1', name: 'Active', club: 'Club A', weightCategory: '-54', ranking: undefined }])
+  assert.deepEqual(tournamentSeedsForGroup(league, 'g1'), [{ sourceLeagueAthleteId: 'la1', name: 'Active', coach: '', club: 'Club A', weightCategory: '-54', ranking: undefined }])
 })
 test('invalid inputs do not consume weigh-in attempts', () => {
   const initial = emptyWeighIn()

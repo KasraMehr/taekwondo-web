@@ -12,14 +12,16 @@ import (
 )
 
 type ovrMatch struct {
-	ID             string `json:"id"`
-	BlueName       string `json:"blueName"`
-	RedName        string `json:"redName"`
-	WeightCategory string `json:"weightCategory"`
-	Side           string `json:"side"`
-	Status         string `json:"status"`
-	MatchNumber    int    `json:"matchNumber"`
-	Round          int    `json:"round"`
+	BlueID         *string `json:"blueId"`
+	RedID          *string `json:"redId"`
+	ID             string  `json:"id"`
+	BlueName       string  `json:"blueName"`
+	RedName        string  `json:"redName"`
+	WeightCategory string  `json:"weightCategory"`
+	Side           string  `json:"side"`
+	Status         string  `json:"status"`
+	MatchNumber    int     `json:"matchNumber"`
+	Round          int     `json:"round"`
 }
 
 func matchForOVR(m tournaments.Match, names map[string]string) ovrMatch {
@@ -38,7 +40,7 @@ func matchForOVR(m tournaments.Match, names map[string]string) ovrMatch {
 	if m.Status != nil {
 		status = string(*m.Status)
 	}
-	return ovrMatch{ID: m.ID, BlueName: blue, RedName: red, WeightCategory: m.WeightCategory, Side: string(m.Side), Status: status, MatchNumber: number, Round: m.Round}
+	return ovrMatch{BlueID: m.Athlete1ID, RedID: m.Athlete2ID, ID: m.ID, BlueName: blue, RedName: red, WeightCategory: m.WeightCategory, Side: string(m.Side), Status: status, MatchNumber: number, Round: m.Round}
 }
 
 func (a *API) publicOVR(r *Request) (any, error) {

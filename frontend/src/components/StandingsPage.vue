@@ -192,6 +192,7 @@ import StandingCard from './StandingCard.vue'
 import { useTournamentStore } from '../stores/tournament'
 import MatchResultModal from './MatchResultModal.vue'
 import MatchResultDetails from './MatchResultDetails.vue'
+import { webApi } from '../webApi'
 
 const activeMatch = computed(() =>
     activeMatchId.value
@@ -209,10 +210,22 @@ function isPlayable(m: any) {
   return !m.isBye && !!m.athlete1Id && !!m.athlete2Id
 }
 
-function openMatch(m: any) {
+const openingMatch=ref(false)
+async function openMatch(m: any) {
   if (!isPlayable(m)) return
+  if(openingMatch.value)return
   if (m.winnerId) detailsMatchId.value = m.id
-  else activeMatchId.value = m.id
+  else {
+    openingMatch.value=true
+    try{
+      if(m.status!=='ongoing'){
+        const started=await webApi().call(`/tournaments/${store.currentTournament!.id}/matches/${m.id}/start`,'POST')
+        Object.assign(m,started)
+      }
+      activeMatchId.value=m.id
+    }catch(e:any){alert(e.message||'شروع ثبت امتیاز ناموفق بود')}
+    finally{openingMatch.value=false}
+  }
 }
 
 function editFromDetails(matchId: string) {
@@ -337,15 +350,15 @@ const brackets = computed(() => {
       const gold = am.get(fm.winnerId)
       const silverId = fm.athlete1Id === fm.winnerId ? fm.athlete2Id : fm.athlete1Id
       const silver = silverId ? am.get(silverId) : null
-      if (gold) standings.push({ key: 'g' + gold.id, medal: '🥇', name: gold.name, club: gold.club ?? '', bgClass: 'gold' })
-      if (silver) standings.push({ key: 's' + silver.id, medal: '🥈', name: silver.name, club: silver.club ?? '', bgClass: 'silver' })
+      if (gold) standings.push({ key: 'g' + gold.id, medal: '🥇', name: gold.name, club: gold.club || (store.currentTournament?.leagueId ? gold.coach : '') || '', bgClass: 'gold' })
+      if (silver) standings.push({ key: 's' + silver.id, medal: '🥈', name: silver.name, club: silver.club || (store.currentTournament?.leagueId ? silver.coach : '') || '', bgClass: 'silver' })
     }
     if (semiRound !== undefined) {
       for (const semi of byRound.get(semiRound) ?? []) {
         if (!semi.winnerId) continue
         const loserId = semi.athlete1Id === semi.winnerId ? semi.athlete2Id : semi.athlete1Id
         const bronze = loserId ? am.get(loserId) : null
-        if (bronze) standings.push({ key: 'b' + bronze.id, medal: '🥉', name: bronze.name, club: bronze.club ?? '', bgClass: 'bronze' })
+        if (bronze) standings.push({ key: 'b' + bronze.id, medal: '🥉', name: bronze.name, club: bronze.club || (store.currentTournament?.leagueId ? bronze.coach : '') || '', bgClass: 'bronze' })
       }
     }
 

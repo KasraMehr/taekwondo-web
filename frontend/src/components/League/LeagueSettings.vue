@@ -3,6 +3,8 @@ import { ref, computed, watch } from "vue";
 import { useLeagueStore } from "../../stores/league";
 import { loadWebLeagues, webApi } from "../../webApi";
 
+import LeagueEdit from './LeagueEdit.vue';
+
 const leagueStore = useLeagueStore();
 const currentLeague = computed(() => leagueStore.currentLeague);
 
@@ -61,6 +63,8 @@ async function promoteTeamsNow() {
 
 <template>
   <div class="space-y-6">
+    <LeagueEdit />
+    <fieldset :disabled="currentLeague?.structureLocked" class="space-y-6">
     <!-- تنظیمات امتیاز -->
     <div class="rounded-2xl border border-slate-200 bg-white p-6">
       <h3 class="mb-4 text-lg font-bold">🎯 تنظیمات امتیازدهی</h3>
@@ -106,17 +110,18 @@ async function promoteTeamsNow() {
       </button>
     </div>
 
+    </fieldset>
     <!-- قوانین صعود -->
     <div class="rounded-2xl border border-slate-200 bg-white p-6">
       <h3 class="mb-4 text-lg font-bold">⬆️ قوانین صعود</h3>
       <div class="grid gap-4 sm:grid-cols-2">
         <div>
           <label class="mb-1 block text-sm font-medium text-slate-600">تعداد تیم‌های صعودکننده</label>
-          <input v-model.number="teamsToPromote" type="number" min="1" max="10" class="w-full rounded-lg border border-slate-300 px-3 py-2" />
+          <input v-model.number="teamsToPromote" :disabled="currentLeague?.structureLocked" type="number" min="1" max="10" class="w-full rounded-lg border border-slate-300 px-3 py-2" />
         </div>
         <div>
           <label class="flex items-center gap-2 pt-6">
-            <input v-model="autoPromote" type="checkbox" class="rounded" />
+            <input v-model="autoPromote" :disabled="currentLeague?.structureLocked" type="checkbox" class="rounded" />
             <span class="text-sm">صعود خودکار پس از اتمام مرحله</span>
           </label>
         </div>

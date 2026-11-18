@@ -24,19 +24,20 @@ type Settings struct {
 }
 
 type League struct {
-	ID          string    `json:"id"`
-	Name        string    `json:"name"`
-	Gender      string    `json:"gender"`
-	AgeCategory string    `json:"ageCategory"`
-	Status      string    `json:"status"`
-	Settings    Settings  `json:"settings"`
-	Revision    int64     `json:"revision"`
-	CreatedAt   time.Time `json:"createdAt"`
-	UpdatedAt   time.Time `json:"updatedAt"`
-	Stages      []Stage   `json:"stages"`
-	Groups      []Group   `json:"groups"`
-	Teams       []Team    `json:"teams"`
-	Athletes    []Athlete `json:"athletes"`
+	StructureLocked bool      `json:"structureLocked"`
+	ID              string    `json:"id"`
+	Name            string    `json:"name"`
+	Gender          string    `json:"gender"`
+	AgeCategory     string    `json:"ageCategory"`
+	Status          string    `json:"status"`
+	Settings        Settings  `json:"settings"`
+	Revision        int64     `json:"revision"`
+	CreatedAt       time.Time `json:"createdAt"`
+	UpdatedAt       time.Time `json:"updatedAt"`
+	Stages          []Stage   `json:"stages"`
+	Groups          []Group   `json:"groups"`
+	Teams           []Team    `json:"teams"`
+	Athletes        []Athlete `json:"athletes"`
 }
 
 type Stage struct {
@@ -150,6 +151,7 @@ type PointEvent struct {
 }
 
 type Standing struct {
+	CoachName      string `json:"coachName,omitempty"`
 	Rank           int    `json:"rank"`
 	ID             string `json:"id"`
 	Name           string `json:"name"`
