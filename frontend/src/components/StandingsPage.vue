@@ -192,6 +192,7 @@ import StandingCard from './StandingCard.vue'
 import { useTournamentStore } from '../stores/tournament'
 import MatchResultModal from './MatchResultModal.vue'
 import MatchResultDetails from './MatchResultDetails.vue'
+import { webApi } from '../webApi'
 
 const activeMatch = computed(() =>
     activeMatchId.value
@@ -209,10 +210,22 @@ function isPlayable(m: any) {
   return !m.isBye && !!m.athlete1Id && !!m.athlete2Id
 }
 
-function openMatch(m: any) {
+const openingMatch=ref(false)
+async function openMatch(m: any) {
   if (!isPlayable(m)) return
+  if(openingMatch.value)return
   if (m.winnerId) detailsMatchId.value = m.id
-  else activeMatchId.value = m.id
+  else {
+    openingMatch.value=true
+    try{
+      if(m.status!=='ongoing'){
+        const started=await webApi().call(`/tournaments/${store.currentTournament!.id}/matches/${m.id}/start`,'POST')
+        Object.assign(m,started)
+      }
+      activeMatchId.value=m.id
+    }catch(e:any){alert(e.message||'شروع ثبت امتیاز ناموفق بود')}
+    finally{openingMatch.value=false}
+  }
 }
 
 function editFromDetails(matchId: string) {

@@ -38,7 +38,8 @@
         >✕</button>
       </div>
 
-      <div class="min-h-0 flex-1 overflow-y-auto overscroll-contain p-2 sm:p-3">
+      <p v-if="match.status==='ongoing'" class="px-4 py-2 text-xs" :class="liveError?'bg-rose-50 text-rose-700':'bg-teal-50 text-teal-800'">{{liveLoading?'در حال دریافت امتیاز زنده…':liveError|| (liveSending?'در حال ارسال امتیاز زنده…':'تغییر امتیازها به‌صورت زنده منتشر می‌شود؛ نتیجه نهایی را در پایان ذخیره کنید.')}} <button v-if="liveError" class="mr-3 underline" @click="hydrate()">دریافت دوباره از سرور</button></p>
+      <div class="min-h-0 flex-1 overflow-y-auto overscroll-contain p-2 sm:p-3" :class="liveLoading?'pointer-events-none opacity-60':''">
         <div class="mx-auto max-w-[1050px] bg-white">
           <div class="mb-2 grid grid-cols-3 gap-px overflow-hidden rounded-lg border border-slate-200 bg-slate-200 text-[11px] sm:grid-cols-6">
             <div class="bg-slate-50 px-2 py-1.5"><span class="text-slate-500">تاریخ: </span><b>{{ matchDate }}</b></div>
@@ -195,7 +196,8 @@
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, ref, watch, h, defineComponent } from 'vue'
+import { computed, nextTick, ref, watch, h, defineComponent, onUnmounted } from 'vue'
+import { webApi } from '../webApi'
 import type { PropType } from 'vue'
 import { useTournamentStore } from '../stores/tournament'
 import {
@@ -289,6 +291,31 @@ const manualWinnerId = ref<string | null>(null)
 const note = ref('')
 const error = ref('')
 const dirty = ref(false)
+const liveLoading=ref(false),liveSending=ref(false),liveError=ref('')
+let liveVersion=0,liveReady=false,livePending=false,liveGeneration=0
+let liveTimer:ReturnType<typeof setTimeout>|undefined
+let liveTask:Promise<void>|null=null
+function queueLive(){
+  if(!liveReady||props.match?.status!=='ongoing'||mode.value!=='score'||liveError.value)return
+  livePending=true
+  clearTimeout(liveTimer);liveTimer=setTimeout(()=>void flushLive(),150)
+}
+async function flushLive(){
+  if(liveTask){await liveTask;if(livePending&&!liveError.value)return flushLive();return}
+  if(!livePending||!liveReady||liveError.value)return
+  const generation=liveGeneration,matchId=props.match.id,tid=props.tournamentId
+  liveTask=(async()=>{
+    liveSending.value=true
+    while(livePending&&generation===liveGeneration){
+      livePending=false
+      const payload=JSON.parse(JSON.stringify({version:liveVersion,blueId:blueId.value,redId:redId.value,activeRound:activeRoundIndex.value,rounds:rounds.value}))
+      try{const value=await webApi().call(`/tournaments/${tid}/matches/${matchId}/live`,'PUT',payload);if(generation===liveGeneration)liveVersion=value.version}
+      catch(e:any){if(generation===liveGeneration){liveError.value=e.message||'ارسال امتیاز زنده ناموفق بود';livePending=false};break}
+    }
+  })()
+  try{await liveTask}finally{liveTask=null;liveSending.value=false}
+}
+onUnmounted(()=>{liveReady=false;liveGeneration++;clearTimeout(liveTimer)})
 
 const blueId = computed(() =>
     swapCorners.value ? props.match?.athlete2Id : props.match?.athlete1Id)
@@ -332,7 +359,10 @@ const canSave = computed(() => {
 })
 
 /* مقدار اولیه */
-function hydrate() {
+async function hydrate() {
+  liveReady=false;livePending=false;clearTimeout(liveTimer)
+  const generation=++liveGeneration
+  liveError.value='';liveVersion=0
   const m = props.match
   error.value = ''
   dirty.value = false
@@ -358,12 +388,28 @@ function hydrate() {
     manualWinnerId.value = null
     rounds.value = [emptyRound(1), emptyRound(2)]
   }
+  if(m.status==='ongoing'){
+    liveLoading.value=true
+    try{
+      const response=await fetch(`/api/v1/public/competitions/${props.tournamentId}/live`,{cache:'no-store'})
+      if(!response.ok)throw new Error('دریافت امتیاز زنده ناموفق بود')
+      const data=await response.json()
+      if(generation!==liveGeneration)return
+      const score=data[m.id]?.score
+      if(score){rounds.value=score.rounds;activeRoundIndex.value=score.activeRound;swapCorners.value=score.blueId===m.athlete2Id;liveVersion=score.version}
+    }catch(e:any){if(generation===liveGeneration)liveError.value=e.message}
+    finally{if(generation===liveGeneration)liveLoading.value=false}
+  }
+  await nextTick()
+  if(generation!==liveGeneration)return
+  dirty.value=false;liveReady=true
   nextTick(() => panel.value?.focus())
 }
 
 watch(() => props.match?.id, hydrate, { immediate: true })
 watch([rounds, mode, manualWinnerId, manualWinType, note, swapCorners],
     () => { dirty.value = true; error.value = '' }, { deep: true })
+watch([rounds,activeRoundIndex,swapCorners],queueLive,{deep:true})
 
 /* اکشن‌ها */
 function addRound(golden = false) {
@@ -387,6 +433,8 @@ const saving = ref(false)
 async function onSave() {
   if (saving.value) return
   saving.value = true
+  clearTimeout(liveTimer)
+  await flushLive()
   const res = await store.submitMatchResult(props.tournamentId, props.match.id, {
     winType: mode.value === 'manual' ? manualWinType.value : 'PTF',
     rounds: mode.value === 'manual' ? [] : rounds.value,
@@ -407,8 +455,9 @@ function onClear() {
   emit('close')
 }
 
-function requestClose() {
-  if (dirty.value && !confirm('تغییرات ذخیره نشده است. بستن؟')) return
+async function requestClose() {
+  if (dirty.value && !confirm('نتیجه نهایی ثبت نشده است. امتیازهای زندهٔ ارسال‌شده حفظ می‌شوند. بستن؟')) return
+  clearTimeout(liveTimer);await flushLive()
   emit('close')
 }
 </script>
