@@ -21,6 +21,7 @@
   <div
       id="bracket-print-root"
       class="min-h-screen bg-slate-100 p-4 font-sans"
+      :class="{ 'public-bracket': publicTournament }"
       dir="rtl"
   >
     <div class="no-print print-intro">
@@ -135,7 +136,8 @@
       </header>
 
       <!-- براکت اصلی -->
-      <div class="bracket-scroll-container">
+      <p v-if="publicTournament" class="no-print public-bracket-hint">برای دنبال کردن مسیر بازی‌ها، جدول را به چپ و راست بکشید.</p>
+      <div class="bracket-scroll-container" :tabindex="publicTournament ? 0 : undefined" :role="publicTournament ? 'region' : undefined" :aria-label="publicTournament ? 'جدول مسابقات وزن ' + page.cat : undefined">
         <div
             class="bracket-stage"
             :class="`size-${page.displaySize}`"
@@ -2460,4 +2462,38 @@ async function refreshPrintData(): Promise<boolean> {
 #bracket-print-root .left-flow .round-column:first-child .athlete-details { width:calc(100% - 9mm); margin-right:9mm; }
 #bracket-print-root .right-flow .round-column:last-child .athlete-details { width:calc(100% - 9mm); margin-left:9mm; }
 #bracket-print-root .bracket-stage .match-tag { padding:.4mm; }
+@media screen {
+  #bracket-print-root.public-bracket { padding:12px; min-width:0; background:#f8fafb; border-radius:16px; }
+  #bracket-print-root.public-bracket .category-page { width:100%; max-width:100%; overflow:hidden; border-radius:12px; }
+  #bracket-print-root.public-bracket .print-intro { background:white; color:#334155; border:1px solid #dce5eb; }
+  #bracket-print-root.public-bracket .print-intro p { color:#526477; font-size:15px; }
+  #bracket-print-root.public-bracket button { font-size:14px; min-height:44px; }
+  #bracket-print-root.public-bracket .public-bracket-hint { padding:12px 16px; font-size:14px; color:#476b66; background:#eff7f4; }
+  #bracket-print-root.public-bracket .pdf-header { display:flex; flex-wrap:wrap; height:auto; gap:14px; padding:16px; }
+  #bracket-print-root.public-bracket .header-side { flex-wrap:wrap; }
+  #bracket-print-root.public-bracket .header-center { min-width:0; flex-basis:100%; order:-1; }
+  #bracket-print-root.public-bracket .header-title { font-size:20px; line-height:1.8; white-space:normal; overflow-wrap:anywhere; }
+  #bracket-print-root.public-bracket .header-org { font-size:14px; }
+  #bracket-print-root.public-bracket .header-pill { font-size:14px !important; white-space:normal; }
+  #bracket-print-root.public-bracket .bracket-scroll-container { overflow:auto; max-width:100%; overscroll-behavior-x:contain; }
+  #bracket-print-root.public-bracket .bracket-stage {
+    --column-width:230px; --final-column-width:250px; --column-gap:24px;
+    --row-height:190px; --card-height:180px; --row-gap:12px;
+    width:max-content; min-width:max-content; height:auto; min-height:var(--track-height);
+  }
+  #bracket-print-root.public-bracket .round-column { --column-width:230px; }
+  #bracket-print-root.public-bracket .round-heading { height:44px; min-height:44px; max-height:none; }
+  #bracket-print-root.public-bracket .round-heading span,
+  #bracket-print-root.public-bracket .bracket-stage .athlete-name,
+  #bracket-print-root.public-bracket .bracket-stage .athlete-placeholder { font-size:16px; line-height:1.7; }
+  #bracket-print-root.public-bracket .bracket-stage .athlete-affiliation { font-size:14px; line-height:1.6; }
+  #bracket-print-root.public-bracket .bracket-stage .match-tag { font-size:16px; }
+  #bracket-print-root.public-bracket .final-match-anchor .match-card { height:190px; min-height:190px; }
+  #bracket-print-root.public-bracket .champion-content strong,
+  #bracket-print-root.public-bracket .podium-info strong { font-size:16px; white-space:normal; }
+  #bracket-print-root.public-bracket .champion-content small,
+  #bracket-print-root.public-bracket .podium-info small,
+  #bracket-print-root.public-bracket .bracket-page-footer { font-size:14px; white-space:normal; }
+  #bracket-print-root.public-bracket .bracket-page-footer { flex-wrap:wrap; }
+}
 </style>
