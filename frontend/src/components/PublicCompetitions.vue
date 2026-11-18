@@ -3,6 +3,7 @@ import { computed, onMounted, onUnmounted, ref } from 'vue'
 import LiveScores from './LiveScores.vue'
 import WeightLeaders from './WeightLeaders.vue'
 import BracketPdfExport from './BracketPdfExport.vue'
+import PublicIcon from './PublicIcon.vue'
 import type { Match as BracketMatch, Tournament } from '../types'
 import { competitionPeriod, tehranDate } from '../utils/publicCompetition'
 import { normalizeText } from '../utils/athleteImport'
@@ -79,18 +80,28 @@ const dateLabel=(value:string)=>new Date(value.slice(0,10)+'T12:00:00+03:30').to
       <template v-if="!id">
         <section class="welcome">
           <div><span class="eyebrow">برای بازیکن‌ها، مربی‌ها و خانواده‌ها</span><h1>مسابقه را از نزدیک<br><span>دنبال کنید.</span></h1><p>مسابقه‌تان را پیدا کنید؛ جدول بازی‌ها، امتیازهای زنده و جایگاه تیم و بازیکن‌ها همین‌جاست.</p></div>
-          <div class="welcome-aside"><span class="calendar-mark" aria-hidden="true">امروز</span><strong>{{dateLabel(today)}}</strong><span>هر امتیاز، یک قدم تا قهرمانی</span><a v-if="todayItems.length" href="#today-competitions" class="text-link">مشاهده مسابقات امروز ↓</a></div>
+          <div class="welcome-aside">
+            <div class="bracket-art" aria-hidden="true"><svg viewBox="0 0 320 150" fill="none"><path d="M20 30h65v35h60m-125 55h65V85h60m155-55h-65v35h-60m125 55h-65V85h-60" stroke="#a9c7d8" stroke-width="2"/><g fill="#edf5ff" stroke="#afc9e9"><rect x="8" y="16" width="52" height="28" rx="8"/><rect x="8" y="106" width="52" height="28" rx="8"/><rect x="260" y="16" width="52" height="28" rx="8"/><rect x="260" y="106" width="52" height="28" rx="8"/></g><circle cx="160" cy="75" r="33" fill="#e1f3eb" stroke="#85baa9"/><path d="M147 57h26v11c0 17-26 17-26 0V57Zm0 4h-8v6c0 7 8 9 12 9m22-15h8v6c0 7-8 9-12 9m-9 7v10m-10 0h20" stroke="#247c69" stroke-width="2.5" stroke-linecap="round"/><g fill="#6e9ac6"><circle cx="25" cy="30" r="4"/><circle cx="25" cy="120" r="4"/><circle cx="277" cy="30" r="4"/><circle cx="277" cy="120" r="4"/></g></svg><span>از اولین بازی تا فینال</span></div>
+            <div class="today-date"><PublicIcon name="calendar"/><span>امروز · {{dateLabel(today)}}</span></div>
+            <a v-if="todayItems.length" href="#today-competitions" class="text-link">مشاهده مسابقات امروز ↓</a>
+          </div>
+        </section>
+        <section class="guide-cards" aria-label="راهنمای دنبال کردن مسابقات">
+          <article><span class="feature-icon"><PublicIcon name="bracket"/></span><div><h2>مسیر بازیکن شما</h2><p>جدول را باز کنید و حریف‌ها و مسیر صعود تا فینال را ببینید.</p></div><span class="guide-number" aria-hidden="true">۰۱</span></article>
+          <article><span class="feature-icon blue-icon"><PublicIcon name="results"/></span><div><h2>همراه با هر امتیاز</h2><p>نتایج بازی‌ها و امتیازهای در حال ثبت را دنبال کنید.</p></div><span class="guide-number" aria-hidden="true">۰۲</span></article>
+          <article><span class="feature-icon purple-icon"><PublicIcon name="teams"/></span><div><h2>کنار تیم محبوبتان</h2><p>جایگاه بازیکن‌ها، تیم‌ها و مدال‌هایشان را پیدا کنید.</p></div><span class="guide-number" aria-hidden="true">۰۳</span></article>
         </section>
         <form class="search-panel" role="search" @submit.prevent="load()"><label for="competition-search">دنبال کدام مسابقه هستید؟</label><div class="search-row"><input id="competition-search" v-model="query" type="search" placeholder="نام مسابقه یا لیگ را بنویسید…"><button class="primary-button" :disabled="loading">جستجو</button></div></form>
         <section v-for="section in listSections" :id="section.key==='today'?'today-competitions':undefined" :key="section.key" class="competition-section">
           <div class="section-heading"><div><h2><span v-if="section.key==='today'" class="today-dot" aria-hidden="true"></span>{{section.title}}</h2><p>{{section.hint}}</p></div><span class="count-badge">{{section.items.length.toLocaleString('fa-IR')}} مسابقه</span></div>
           <div class="competition-grid"><article v-for="item in section.items" :key="item.id" class="competition-card" :class="{'today-card':section.key==='today'}">
-            <div class="card-top"><span class="event-kind">{{item.leagueName||'تورنومنت'}}</span><span class="date-badge" :class="{'today-badge':section.key==='today'}">{{periodLabel(item.date)}}</span></div>
+            <div class="card-top"><span class="event-kind"><span class="event-icon"><PublicIcon name="bracket"/></span>{{item.leagueName||'تورنومنت'}}</span><span class="date-badge" :class="{'today-badge':section.key==='today'}">{{periodLabel(item.date)}}</span></div>
             <h3><a :href="competitionLink(item.id)">{{item.name}}</a></h3>
-            <p class="event-date">{{dateLabel(item.date)}}</p>
+            <p class="event-date"><PublicIcon name="calendar"/>{{dateLabel(item.date)}}</p>
             <div class="event-tags"><span>{{item.ageCategory}}</span><span>{{item.gender==='male'?'پسران / آقایان':'دختران / بانوان'}}</span><span>{{item.courts.toLocaleString('fa-IR')}} زمین</span></div>
             <p v-if="item.organizer" class="organizer">برگزارکننده: {{item.organizer}}</p>
             <div class="card-actions"><a :href="competitionLink(item.id)" class="primary-button">جدول مسابقه ←</a><a :href="competitionLink(item.id,'results')" class="secondary-button">نتایج بازی‌ها</a></div>
+            <div class="card-shortcuts"><a :href="competitionLink(item.id,'players')"><PublicIcon name="players"/>رتبهٔ بازیکن‌ها</a><a :href="competitionLink(item.id,'teams')"><PublicIcon name="teams"/>رتبهٔ تیم‌ها</a></div>
           </article></div>
         </section>
         <div v-if="!loading&&!error&&!items.length" class="empty-state"><strong>مسابقه‌ای پیدا نشد</strong><p>نام کوتاه‌تر یا نام لیگ را جستجو کنید.</p><button v-if="query" class="secondary-button" @click="query='';load()">نمایش همه مسابقات</button></div>
@@ -104,7 +115,7 @@ const dateLabel=(value:string)=>new Date(value.slice(0,10)+'T12:00:00+03:30').to
           <p class="update-status" :class="{'connection-error':error}"><span class="status-dot" aria-hidden="true"></span>{{error?'ارتباط قطع شده؛ اطلاعات ممکن است قدیمی باشد':'به‌روزرسانی خودکار · آخرین دریافت '+updated}}</p>
         </section>
         <LiveScores :tournament-id="detail.id" :names="names" />
-        <nav class="competition-tabs" aria-label="بخش‌های مسابقه"><button v-for="item in tabs" :key="item.id" :aria-pressed="tab===item.id" :class="{'selected':tab===item.id}" @click="selectTab(item.id)">{{item.label}}<span>{{item.id==='bracket'?'مسیر رسیدن به فینال':item.id==='results'?'بازی‌ها و برنده‌ها':item.id==='players'?'امتیاز و مدال بازیکن‌ها':'جایگاه تیم‌ها و باشگاه‌ها'}}</span></button></nav>
+        <nav class="competition-tabs" aria-label="بخش‌های مسابقه"><button v-for="item in tabs" :key="item.id" :aria-pressed="tab===item.id" :class="{'selected':tab===item.id}" @click="selectTab(item.id)"><PublicIcon :name="item.id" class="tab-icon"/>{{item.label}}<span>{{item.id==='bracket'?'مسیر رسیدن به فینال':item.id==='results'?'بازی‌ها و برنده‌ها':item.id==='players'?'امتیاز و مدال بازیکن‌ها':'جایگاه تیم‌ها و باشگاه‌ها'}}</span></button></nav>
         <div v-if="tab!=='bracket'" class="filter-panel"><label class="person-search" for="person-search">{{tab==='teams'?'تیم خود را پیدا کنید':'بازیکن خود را پیدا کنید'}}<input id="person-search" v-model="personQuery" type="search" :placeholder="tab==='teams'?'نام تیم یا باشگاه…':'نام بازیکن، تیم یا مربی…'"></label><label v-if="tab!=='teams'" for="weight-filter">دستهٔ وزنی<select id="weight-filter" v-model="weight"><option value="">همه وزن‌ها</option><option v-for="w in weights" :key="w" :value="w">{{w}}</option></select></label><button v-if="personQuery||weight" class="text-link" @click="personQuery='';weight=''">پاک کردن فیلترها</button></div>
         <template v-if="tab==='bracket'"><BracketPdfExport :public-tournament="publicTournament" /></template>
         <section v-else-if="tab==='results'" class="results-section">
@@ -128,6 +139,29 @@ const dateLabel=(value:string)=>new Date(value.slice(0,10)+'T12:00:00+03:30').to
 </template>
 
 <style scoped>
+.bracket-art{width:290px;max-width:100%;text-align:center;background:radial-gradient(ellipse,#edf6fc 0,transparent 70%);padding-bottom:12px}
+.bracket-art svg{width:100%;height:auto}
+.bracket-art>span{font-size:12px;font-weight:700;color:#426b68;letter-spacing:.2px}
+.today-date{display:flex;align-items:center;gap:8px;padding:9px 14px;border:1px solid #dbe9e4;border-radius:12px;background:#fff;color:#42665d;font-size:12px}
+.today-date svg{width:18px;height:18px}
+.guide-cards{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}
+.guide-cards article{position:relative;display:flex;align-items:start;gap:13px;padding:21px 18px;background:#fff;border:1px solid #e0e9ee;border-radius:18px;box-shadow:0 4px 18px #273e5104}
+.guide-cards h2{font-size:14px;font-weight:800;margin-bottom:6px;color:#334155}
+.guide-cards p{font-size:11px;color:#64748b;line-height:2;max-width:240px}
+.feature-icon{display:grid;place-items:center;width:42px;height:42px;flex-shrink:0;border-radius:13px;background:#e8f5ef;color:#28806a;border:1px solid #d3eade}
+.blue-icon{background:#edf4fe;color:#4d77aa;border-color:#dbe6f5}
+.purple-icon{background:#f3effa;color:#82649f;border-color:#e8def2}
+.guide-number{position:absolute;left:12px;top:9px;font-size:11px;color:#b4c2cd}
+.event-kind{display:flex;align-items:center;gap:9px}
+.event-icon{display:grid;place-items:center;width:34px;height:34px;border-radius:10px;background:#edf5f4;color:#438477}
+.event-icon svg{width:19px;height:19px}
+.event-date{display:flex;align-items:center;gap:7px}
+.event-date svg{width:17px;height:17px;color:#759591}
+.card-shortcuts{display:flex;flex-wrap:wrap;gap:18px;border-top:1px solid #e9eef2;margin-top:18px;padding-top:14px}
+.card-shortcuts a{display:flex;align-items:center;gap:6px;font-size:11px;color:#587084;padding:3px 0}
+.card-shortcuts a:hover{color:#0f766e}
+.card-shortcuts svg{width:17px;height:17px}
+.competition-tabs .tab-icon{display:inline-block;vertical-align:middle;margin-left:8px;width:21px;height:21px}
 #today-competitions .competition-grid{grid-template-columns:repeat(auto-fit,minmax(min(100%,360px),1fr))}
 #today-competitions .card-actions{max-width:440px;width:100%}
 .public-hub{min-height:100vh;background:linear-gradient(180deg,#f4faf7 0,#fafbfc 540px);color:#1e293b;font-family:Vazirmatn,sans-serif;font-size:14px;line-height:1.7}
@@ -145,9 +179,9 @@ const dateLabel=(value:string)=>new Date(value.slice(0,10)+'T12:00:00+03:30').to
 .welcome h1{font-size:clamp(30px,4vw,46px);font-weight:900;line-height:1.65;margin:12px 0}
 .welcome h1 span{color:#0f766e;text-decoration:underline;text-decoration-color:#d7ede2;text-decoration-thickness:7px;text-underline-offset:10px;text-decoration-skip-ink:none}
 .welcome p{max-width:570px;color:#64748b;line-height:2.1;font-size:15px}
-.welcome-aside{min-width:250px;display:flex;flex-direction:column;justify-content:center;align-items:center;gap:14px;border-right:1px solid #e2e8f0;padding:16px 40px;color:#64748b;font-size:12px}
+.welcome-aside{min-width:330px;display:flex;flex-direction:column;justify-content:center;align-items:center;gap:14px;border-right:1px solid #e2e8f0;padding:0 24px;color:#64748b;font-size:12px}
 .welcome-aside strong{font-size:19px;color:#334155}
-.calendar-mark{background:#fff9ed;border:1px solid #f0dfba;border-top:4px solid #d4a445;border-radius:15px;padding:12px 26px;color:#88631e;font-weight:900;font-size:18px;box-shadow:0 8px 24px #9772230a}
+.calendar-mark{background:#eff8f4;border:1px solid #cde7dd;border-top:4px solid #27856b;border-radius:15px;padding:12px 26px;color:#226d5c;font-weight:900;font-size:18px;box-shadow:0 8px 24px #22735c0a}
 .search-panel{border:1px solid #e2e8f0;background:#fff;border-radius:20px;padding:20px}
 .search-panel label,.filter-panel label{display:block;font-size:12px;font-weight:700;color:#475569}
 .search-row{display:flex;gap:10px;margin-top:10px}
@@ -171,7 +205,7 @@ button:disabled{opacity:.55;cursor:wait}
 .competition-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:18px}
 .competition-card{display:flex;flex-direction:column;background:linear-gradient(160deg,#f7faff,#fff 35%);border:1px solid #e2e8f0;border-radius:20px;padding:24px;box-shadow:0 4px 16px #243c5406;transition:box-shadow .2s,border-color .2s}
 .competition-card:hover{border-color:#a8cfc4;box-shadow:0 8px 24px #182c3909}
-.today-card{border:2px solid #69b39e;background:radial-gradient(ellipse at top left,#fff5dc80,transparent 50%),linear-gradient(160deg,#e9f7ef 0%,#fff 70%);box-shadow:0 6px 22px #16624b0d}
+.today-card{border:2px solid #69b39e;background:radial-gradient(ellipse at top left,#e4efff80,transparent 50%),linear-gradient(160deg,#e9f7ef 0%,#fff 70%);box-shadow:0 6px 22px #16624b0d}
 .card-top{display:flex;align-items:center;justify-content:space-between;gap:12px}
 .event-kind{font-size:11px;color:#64748b}
 .date-badge{flex-shrink:0;background:#f1f5f9;color:#64748b;padding:4px 11px;border-radius:8px;font-size:11px;font-weight:700}
@@ -183,7 +217,7 @@ button:disabled{opacity:.55;cursor:wait}
 .event-tags span{font-size:11px;border-radius:7px;background:#f6f8fa;padding:4px 8px;color:#64748b}
 .event-tags span:first-child{background:#edf3ff;color:#46658d}
 .event-tags span:nth-child(2){background:#f3effb;color:#77618e}
-.event-tags span:nth-child(3){background:#fff6e6;color:#896a30}
+.event-tags span:nth-child(3){background:#eaf5f2;color:#3e7468}
 .organizer{font-size:11px;color:#64748b;margin:14px 0 0}
 .card-actions{display:flex;gap:8px;padding-top:22px;margin-top:auto}
 .card-actions a{flex:1;padding-inline:8px;font-size:12px}
@@ -204,7 +238,7 @@ button:disabled{opacity:.55;cursor:wait}
 .competition-tabs{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;background:#fff;border:1px solid #e2e8f0;padding:8px;border-radius:18px}
 .competition-tabs button{--tab-tint:#eaf5f1;--tab-color:#0f655d;--tab-accent:#188574;text-align:right;padding:13px 18px;border-radius:12px;color:#64748b;font-weight:700;font-size:14px;min-height:64px;transition:background .15s,color .15s}
 .competition-tabs button:nth-child(2){--tab-tint:#edf4ff;--tab-color:#355b8d;--tab-accent:#648dc2}
-.competition-tabs button:nth-child(3){--tab-tint:#fff7e7;--tab-color:#866224;--tab-accent:#c6a04e}
+.competition-tabs button:nth-child(3){--tab-tint:#eef4ff;--tab-color:#355b8d;--tab-accent:#648dc2}
 .competition-tabs button:nth-child(4){--tab-tint:#f4effa;--tab-color:#70578e;--tab-accent:#a28abd}
 .competition-tabs button span{display:block;font-size:10px;font-weight:400;margin-top:4px}
 .competition-tabs .selected{color:var(--tab-color);background:var(--tab-tint);box-shadow:inset 0 -3px var(--tab-accent)}
@@ -242,7 +276,7 @@ td{font-size:13px}
 .ranking-name{font-weight:700}
 .points{font-weight:900;color:#0f766e;font-size:16px}
 .rank-number{display:inline-grid;place-items:center;width:32px;height:32px;border-radius:10px;background:#f4f6f8;font-weight:700}
-.top-rank{color:#866019;background:linear-gradient(135deg,#fff6df,#ffedc5);box-shadow:inset 0 0 0 1px #eed7a3}
+.top-rank{color:#315e82;background:linear-gradient(135deg,#eaf4fc,#dcecf9);box-shadow:inset 0 0 0 1px #c5ddee}
 .scoring-help{padding:18px 22px;font-size:12px;color:#64748b}
 .scoring-help summary{cursor:pointer;color:#475569;font-weight:700}
 .scoring-help p{padding-top:12px;line-height:2}
@@ -253,6 +287,14 @@ td{font-size:13px}
 @media(max-width:1000px){.competition-grid,.results-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
 .welcome-aside{min-width:210px;padding-inline:24px}}
 @media(max-width:640px){.page-width{padding-inline:16px}
+.guide-cards{grid-template-columns:1fr;gap:10px}
+.guide-cards article{padding:16px;align-items:center}
+.guide-cards p{max-width:none}
+.guide-cards h2{font-size:13px;margin-bottom:3px}
+.bracket-art{width:190px;margin:auto;flex-basis:100%;padding-bottom:0}
+.bracket-art svg{max-height:95px}
+.today-date{font-size:11px;padding:8px 10px}
+.competition-tabs .tab-icon{width:18px;height:18px;margin-left:5px}
 .header-inner{min-height:76px}
 .header-note{display:none}
 .brand{font-size:15px}
