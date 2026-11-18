@@ -88,7 +88,7 @@ export const useLeagueStore = defineStore("league", () => {
         leagues.value = items.map(({ league: raw, standings }) => {
             webStandings.value[raw.id] = {
                 players: (standings?.players ?? []).map((row: any) => ({
-                    rank: row.rank, athleteId: row.id, name: row.name, club: row.clubName,
+                    rank: row.rank, athleteId: row.id, name: row.name, club: row.clubName || row.coachName,
                     weightCategory: row.weightCategory, totalPoints: row.totalPoints,
                     gold: row.gold, silver: row.silver, bronze: row.bronze,
                     weighInPoints: row.weighInPoints, winPoints: row.winPoints,
@@ -114,7 +114,7 @@ export const useLeagueStore = defineStore("league", () => {
                 athleteIds: (raw.athletes ?? []).filter((a: any) => a.active && a.groupId === g.id).map((a: any) => a.id),
             }))
             return {
-                id: raw.id, name: raw.name, gender: raw.gender, ageCategory: raw.ageCategory,
+                structureLocked: !!raw.structureLocked, id: raw.id, name: raw.name, gender: raw.gender, ageCategory: raw.ageCategory,
                 format: 'grandPrix', createdAt: raw.createdAt, updatedAt: raw.updatedAt,
                 promotionRules: { teamsToPromote: raw.settings?.teamsToPromote ?? 2, autoPromote: raw.settings?.autoPromote ?? true },
                 clubs: (raw.teams ?? []).map((t: any) => ({ id: t.clubId, teamId: t.id, name: t.clubName, groupId: t.groupId, active: t.active, createdAt: raw.createdAt })),

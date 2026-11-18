@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, ref, onMounted } from 'vue'
 import { useUiStore, type LeagueTab } from '../../stores/ui'
 import { useLeagueStore } from '../../stores/league'
 import { loadWebLeagues } from '../../webApi'
@@ -21,6 +21,7 @@ const tabs:Array<{key:LeagueTab;step?:number;label:string;hint:string}>=[
   {key:'backup',label:'ورودی و خروجی',hint:'پشتیبان فصل'},
 ]
 async function refresh(){refreshing.value=true;error.value='';try{store.replaceFromBackend(await loadWebLeagues())}catch(e:any){error.value=e?.message||'به‌روزرسانی ناموفق بود'}finally{refreshing.value=false}}
+onMounted(refresh)
 </script>
 
 <template>

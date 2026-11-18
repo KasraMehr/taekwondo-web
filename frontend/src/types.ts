@@ -4,6 +4,7 @@ export interface Athlete {
     id: string;
     number?: number;
     sourceLeagueAthleteId?: string;
+    coach?: string;
     name: string;
     club: string;
     weightCategory: string;
@@ -259,6 +260,7 @@ export interface Season {
 // ─── لیگ ───
 
 export interface League {
+    structureLocked?: boolean
     id: string
     name: string
     gender: Gender
@@ -612,6 +614,7 @@ export interface GroupTeamRankings {
 }
 
 export interface LeagueAthlete {
+    coachName?: string
     id: string
     name: string
     nationalId: string | null
@@ -679,6 +682,7 @@ export interface AthleteImportResult {
 }
 
 export interface AthleteDraft {
+    coachName?: string
     name: string
     clubId: string | null
     weightCategory: string | null
