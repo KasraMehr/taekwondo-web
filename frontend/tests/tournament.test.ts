@@ -1,6 +1,7 @@
 import test from 'node:test'
 import './poomsae.test'
 import './leagueAthleteExcel.test'
+import './publicCompetition.test'
 import assert from 'node:assert/strict'
 import { createPinia, setActivePinia } from 'pinia'
 import { generateBracket, recordResult } from '../src/utils/bracket'
