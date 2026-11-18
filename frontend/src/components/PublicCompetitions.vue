@@ -126,6 +126,13 @@ const dateLabel=(value:string)=>new Date(value.slice(0,10)+'T12:00:00+03:30').to
         <template v-else>
           <WeightLeaders v-if="tab==='players'&&!personQuery&&!weight" :players="detail.standings.players" />
           <section class="ranking-section"><div class="section-heading"><div><h2>{{tab==='teams'?'رتبه‌بندی تیم‌ها':'رتبه‌بندی بازیکن‌ها'}}</h2><p>{{detail.rankingScope==='league'?'امتیازهای کل لیگ '+detail.leagueName:'امتیازهای همین تورنومنت'}}</p></div></div>
+            <div class="mobile-rankings">
+              <article v-for="(p,i) in ranking" :key="i" class="mobile-ranking-card">
+                <header><span class="rank-number" :class="{'top-rank':p.rank<=3}">{{p.rank.toLocaleString('fa-IR')}}</span><div><h3>{{p.name||'آزاد'}}</h3><p v-if="tab==='players'">{{p.clubName||p.coachName||'آزاد'}} · وزن <b dir="ltr">{{p.weightCategory}}</b></p></div></header>
+                <dl><div><dt>امتیاز</dt><dd class="points">{{p.totalPoints.toLocaleString('fa-IR')}}</dd></div><div><dt>برد / باخت</dt><dd>{{p.wins}} / {{p.losses}}</dd></div><div><dt>طلا / نقره / برنز</dt><dd>{{p.gold}} / {{p.silver}} / {{p.bronze}}</dd></div><div v-if="p.groupName"><dt>گروه</dt><dd>{{p.groupName}}</dd></div></dl>
+              </article>
+              <p v-if="!ranking.length" class="empty-state">{{personQuery||weight?'نتیجه‌ای با این مشخصات پیدا نشد.':'هنوز امتیازی ثبت نشده است.'}}</p>
+            </div>
             <div class="table-scroll" tabindex="0" role="region" aria-label="جدول رتبه‌بندی؛ برای ستون‌های بیشتر به طرفین حرکت کنید"><table><thead><tr><th>رتبه</th><th>{{tab==='teams'?'تیم / باشگاه':'بازیکن'}}</th><th v-if="tab==='players'">تیم یا مربی / وزن</th><th>گروه</th><th>امتیاز</th><th>طلا / نقره / برنز</th><th>برد / باخت</th></tr></thead><tbody><tr v-for="(p,i) in ranking" :key="i"><td><span class="rank-number" :class="{'top-rank':p.rank<=3}">{{p.rank.toLocaleString('fa-IR')}}</span></td><td class="ranking-name">{{p.name||'آزاد'}}</td><td v-if="tab==='players'">{{p.clubName||p.coachName||'آزاد'}} <small class="block" dir="ltr">{{p.weightCategory}}</small></td><td>{{p.groupName||'—'}}</td><td class="points">{{p.totalPoints.toLocaleString('fa-IR')}}</td><td>{{p.gold}} / {{p.silver}} / {{p.bronze}}</td><td>{{p.wins}} / {{p.losses}}</td></tr><tr v-if="!ranking.length"><td :colspan="tab==='players'?7:6" class="empty-state">{{personQuery||weight?'نتیجه‌ای با این مشخصات پیدا نشد.':'هنوز امتیازی ثبت نشده است.'}}</td></tr></tbody></table></div>
             <details class="scoring-help"><summary>امتیازها چطور محاسبه می‌شوند؟</summary><p>طلا {{detail.scoring.gold}}، نقره {{detail.scoring.silver}}، برنز {{detail.scoring.bronze}}، هر برد {{detail.scoring.countWin?detail.scoring.winPoint:0}} و وزن‌کشی {{detail.scoring.countWeighIn?detail.scoring.weighInPoint:0}} امتیاز. مدال‌ها پس از تکمیل جدول هر وزن ثبت می‌شوند؛ دو بازندهٔ نیمه‌نهایی برنز می‌گیرند.</p></details>
           </section>
@@ -141,24 +148,24 @@ const dateLabel=(value:string)=>new Date(value.slice(0,10)+'T12:00:00+03:30').to
 <style scoped>
 .bracket-art{width:290px;max-width:100%;text-align:center;background:radial-gradient(ellipse,#edf6fc 0,transparent 70%);padding-bottom:12px}
 .bracket-art svg{width:100%;height:auto}
-.bracket-art>span{font-size:12px;font-weight:700;color:#426b68;letter-spacing:.2px}
-.today-date{display:flex;align-items:center;gap:8px;padding:9px 14px;border:1px solid #dbe9e4;border-radius:12px;background:#fff;color:#42665d;font-size:12px}
+.bracket-art>span{font-size:14px;font-weight:700;color:#426b68;letter-spacing:.2px}
+.today-date{display:flex;align-items:center;gap:8px;padding:9px 14px;border:1px solid #dbe9e4;border-radius:12px;background:#fff;color:#42665d;font-size:14px}
 .today-date svg{width:18px;height:18px}
 .guide-cards{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}
 .guide-cards article{position:relative;display:flex;align-items:start;gap:13px;padding:21px 18px;background:#fff;border:1px solid #e0e9ee;border-radius:18px;box-shadow:0 4px 18px #273e5104}
 .guide-cards h2{font-size:14px;font-weight:800;margin-bottom:6px;color:#334155}
-.guide-cards p{font-size:11px;color:#64748b;line-height:2;max-width:240px}
+.guide-cards p{font-size:14px;color:#64748b;line-height:2;max-width:240px}
 .feature-icon{display:grid;place-items:center;width:42px;height:42px;flex-shrink:0;border-radius:13px;background:#e8f5ef;color:#28806a;border:1px solid #d3eade}
 .blue-icon{background:#edf4fe;color:#4d77aa;border-color:#dbe6f5}
 .purple-icon{background:#f3effa;color:#82649f;border-color:#e8def2}
-.guide-number{position:absolute;left:12px;top:9px;font-size:11px;color:#b4c2cd}
+.guide-number{position:absolute;left:12px;top:9px;font-size:14px;color:#b4c2cd}
 .event-kind{display:flex;align-items:center;gap:9px}
 .event-icon{display:grid;place-items:center;width:34px;height:34px;border-radius:10px;background:#edf5f4;color:#438477}
 .event-icon svg{width:19px;height:19px}
 .event-date{display:flex;align-items:center;gap:7px}
 .event-date svg{width:17px;height:17px;color:#759591}
 .card-shortcuts{display:flex;flex-wrap:wrap;gap:18px;border-top:1px solid #e9eef2;margin-top:18px;padding-top:14px}
-.card-shortcuts a{display:flex;align-items:center;gap:6px;font-size:11px;color:#587084;padding:3px 0}
+.card-shortcuts a{display:flex;align-items:center;gap:6px;font-size:14px;color:#587084;padding:3px 0}
 .card-shortcuts a:hover{color:#0f766e}
 .card-shortcuts svg{width:17px;height:17px}
 .competition-tabs .tab-icon{display:inline-block;vertical-align:middle;margin-left:8px;width:21px;height:21px}
@@ -169,37 +176,37 @@ const dateLabel=(value:string)=>new Date(value.slice(0,10)+'T12:00:00+03:30').to
 .site-header{background:#fff;border-bottom:1px solid #e8edf0}
 .header-inner{display:flex;align-items:center;justify-content:space-between;gap:16px;min-height:92px}
 .brand{display:flex;align-items:center;gap:12px;font-size:17px;font-weight:900;color:#173c39}
-.brand small{display:block;font-size:11px;font-weight:400;color:#64748b;margin-top:2px}
+.brand small{display:block;font-size:14px;font-weight:400;color:#64748b;margin-top:2px}
 .brand-mark{display:grid;place-items:center;width:46px;height:46px;border-radius:15px;background:linear-gradient(145deg,#d8f3e7,#e8f2fc);border:1px solid #cce5dd;color:#0f766e;font-size:14px;letter-spacing:1px;box-shadow:0 3px 10px #1a766b0a}
-.header-note,.back-link{font-size:12px;color:#64748b}
+.header-note,.back-link{font-size:14px;color:#64748b}
 .back-link{padding:10px;border:1px solid #e2e8f0;border-radius:12px}
 .main-content{padding-block:36px 70px;display:flex;flex-direction:column;gap:28px}
 .welcome{display:flex;justify-content:space-between;gap:40px;padding:24px 4px 18px}
-.eyebrow{font-size:12px;font-weight:700;color:#0f766e}
+.eyebrow{font-size:14px;font-weight:700;color:#0f766e}
 .welcome h1{font-size:clamp(30px,4vw,46px);font-weight:900;line-height:1.65;margin:12px 0}
 .welcome h1 span{color:#0f766e;text-decoration:underline;text-decoration-color:#d7ede2;text-decoration-thickness:7px;text-underline-offset:10px;text-decoration-skip-ink:none}
 .welcome p{max-width:570px;color:#64748b;line-height:2.1;font-size:15px}
-.welcome-aside{min-width:330px;display:flex;flex-direction:column;justify-content:center;align-items:center;gap:14px;border-right:1px solid #e2e8f0;padding:0 24px;color:#64748b;font-size:12px}
+.welcome-aside{min-width:330px;display:flex;flex-direction:column;justify-content:center;align-items:center;gap:14px;border-right:1px solid #e2e8f0;padding:0 24px;color:#64748b;font-size:14px}
 .welcome-aside strong{font-size:19px;color:#334155}
 .calendar-mark{background:#eff8f4;border:1px solid #cde7dd;border-top:4px solid #27856b;border-radius:15px;padding:12px 26px;color:#226d5c;font-weight:900;font-size:18px;box-shadow:0 8px 24px #22735c0a}
 .search-panel{border:1px solid #e2e8f0;background:#fff;border-radius:20px;padding:20px}
-.search-panel label,.filter-panel label{display:block;font-size:12px;font-weight:700;color:#475569}
+.search-panel label,.filter-panel label{display:block;font-size:14px;font-weight:700;color:#475569}
 .search-row{display:flex;gap:10px;margin-top:10px}
 input,select{border:1px solid #dce4e9;border-radius:12px;background:#fff;color:#1e293b;min-height:46px;padding:10px 14px;font:inherit;min-width:0}
 input::placeholder{color:#8492a2}
 .search-row input{flex:1}
-.primary-button,.secondary-button{display:inline-flex;justify-content:center;align-items:center;gap:8px;min-height:44px;padding:10px 18px;border-radius:12px;font-size:13px;font-weight:700;text-align:center;transition:background .15s,border-color .15s}
+.primary-button,.secondary-button{display:inline-flex;justify-content:center;align-items:center;gap:8px;min-height:44px;padding:10px 18px;border-radius:12px;font-size:14px;font-weight:700;text-align:center;transition:background .15s,border-color .15s}
 .primary-button{background:linear-gradient(135deg,#167e70,#0f6c68);color:#fff;border:1px solid #0f766e;box-shadow:0 3px 8px #0f766e14}
 .primary-button:hover{background:#115e59}
 .secondary-button{background:#fff;border:1px solid #dce5e8;color:#475569}
 .secondary-button:hover{background:#f0f7f5;border-color:#8abcb1}
 button{cursor:pointer}
 button:disabled{opacity:.55;cursor:wait}
-.text-link{color:#0f766e;font-size:12px;font-weight:700;padding:6px}
+.text-link{color:#0f766e;font-size:14px;font-weight:700;padding:6px}
 .section-heading{display:flex;align-items:center;justify-content:space-between;gap:14px;margin-bottom:18px}
 .section-heading h2{font-size:20px;font-weight:800;display:flex;align-items:center;gap:10px}
-.section-heading p{color:#64748b;font-size:12px;margin-top:5px}
-.count-badge{padding:4px 11px;border:1px solid #e2e8f0;border-radius:20px;color:#64748b;font-size:11px;white-space:nowrap;background:#fff}
+.section-heading p{color:#64748b;font-size:14px;margin-top:5px}
+.count-badge{padding:4px 11px;border:1px solid #e2e8f0;border-radius:20px;color:#64748b;font-size:14px;white-space:nowrap;background:#fff}
 .today-dot,.status-dot{display:inline-block;width:8px;height:8px;background:#15936f;border-radius:50%}
 .today-dot{box-shadow:0 0 0 5px #e3f4ec}
 .competition-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:18px}
@@ -207,32 +214,32 @@ button:disabled{opacity:.55;cursor:wait}
 .competition-card:hover{border-color:#a8cfc4;box-shadow:0 8px 24px #182c3909}
 .today-card{border:2px solid #69b39e;background:radial-gradient(ellipse at top left,#e4efff80,transparent 50%),linear-gradient(160deg,#e9f7ef 0%,#fff 70%);box-shadow:0 6px 22px #16624b0d}
 .card-top{display:flex;align-items:center;justify-content:space-between;gap:12px}
-.event-kind{font-size:11px;color:#64748b}
-.date-badge{flex-shrink:0;background:#f1f5f9;color:#64748b;padding:4px 11px;border-radius:8px;font-size:11px;font-weight:700}
+.event-kind{font-size:14px;color:#64748b}
+.date-badge{flex-shrink:0;background:#f1f5f9;color:#64748b;padding:4px 11px;border-radius:8px;font-size:14px;font-weight:700}
 .today-badge{background:#d8f0e3;color:#146447}
 .competition-card h3{font-size:19px;font-weight:800;line-height:1.9;margin:18px 0 10px}
 .today-card h3{font-size:22px;color:#154c3f}
-.event-date{font-size:13px;color:#475569}
+.event-date{font-size:14px;color:#475569}
 .event-tags{display:flex;flex-wrap:wrap;gap:6px;margin-top:14px}
-.event-tags span{font-size:11px;border-radius:7px;background:#f6f8fa;padding:4px 8px;color:#64748b}
+.event-tags span{font-size:14px;border-radius:7px;background:#f6f8fa;padding:4px 8px;color:#64748b}
 .event-tags span:first-child{background:#edf3ff;color:#46658d}
 .event-tags span:nth-child(2){background:#f3effb;color:#77618e}
 .event-tags span:nth-child(3){background:#eaf5f2;color:#3e7468}
-.organizer{font-size:11px;color:#64748b;margin:14px 0 0}
+.organizer{font-size:14px;color:#64748b;margin:14px 0 0}
 .card-actions{display:flex;gap:8px;padding-top:22px;margin-top:auto}
-.card-actions a{flex:1;padding-inline:8px;font-size:12px}
+.card-actions a{flex:1;padding-inline:8px;font-size:14px}
 .empty-state{text-align:center;padding:36px 20px;border:1px dashed #d7e0e6;border-radius:16px;background:white;color:#64748b}
 .empty-state strong{color:#334155}
-.empty-state p{margin:8px 0 16px;font-size:13px}
+.empty-state p{margin:8px 0 16px;font-size:14px}
 .load-more{text-align:center}
 .event-heading{background:radial-gradient(ellipse at top left,#eef7fc,transparent 65%),#fff;border:1px solid #e2e8f0;border-radius:24px;padding:28px;box-shadow:0 5px 20px #253e4e05}
 .event-today{border-top:4px solid #27856b}
 .event-heading h1{font-size:clamp(23px,3vw,32px);font-weight:900;margin:12px 0}
-.event-heading>p{color:#64748b;font-size:13px}
+.event-heading>p{color:#64748b;font-size:14px}
 .event-summary{display:flex;justify-content:space-between;align-items:center;gap:18px;flex-wrap:wrap;margin-top:24px;padding-top:20px;border-top:1px solid #edf1f4}
-.event-stats{display:flex;gap:24px;color:#64748b;font-size:12px}
+.event-stats{display:flex;gap:24px;color:#64748b;font-size:14px}
 .event-stats b{font-size:20px;color:#334155;margin-left:5px}
-.event-heading .update-status{margin-top:18px;font-size:11px;color:#52726a;display:flex;align-items:center;gap:7px}
+.event-heading .update-status{margin-top:18px;font-size:14px;color:#52726a;display:flex;align-items:center;gap:7px}
 .event-heading .connection-error{color:#be123c}
 .connection-error .status-dot{background:#be123c}
 .competition-tabs{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;background:#fff;border:1px solid #e2e8f0;padding:8px;border-radius:18px}
@@ -240,7 +247,7 @@ button:disabled{opacity:.55;cursor:wait}
 .competition-tabs button:nth-child(2){--tab-tint:#edf4ff;--tab-color:#355b8d;--tab-accent:#648dc2}
 .competition-tabs button:nth-child(3){--tab-tint:#eef4ff;--tab-color:#355b8d;--tab-accent:#648dc2}
 .competition-tabs button:nth-child(4){--tab-tint:#f4effa;--tab-color:#70578e;--tab-accent:#a28abd}
-.competition-tabs button span{display:block;font-size:10px;font-weight:400;margin-top:4px}
+.competition-tabs button span{display:block;font-size:14px;font-weight:400;margin-top:4px}
 .competition-tabs .selected{color:var(--tab-color);background:var(--tab-tint);box-shadow:inset 0 -3px var(--tab-accent)}
 .competition-tabs button:hover{background:var(--tab-tint);color:var(--tab-color)}
 .filter-panel{display:flex;align-items:end;flex-wrap:wrap;gap:14px;padding:20px;background:#fff;border:1px solid #e2e8f0;border-radius:18px}
@@ -251,38 +258,38 @@ button:disabled{opacity:.55;cursor:wait}
 .result-card{background:#fff;border:1px solid #e2e8f0;border-radius:18px;padding:18px;box-shadow:0 4px 16px #263d5405}
 .ongoing-card{border-color:#6db79f}
 .result-card header{display:flex;justify-content:space-between;align-items:center}
-.result-card header strong{font-size:13px}
-.match-status{font-size:10px;padding:4px 9px;border-radius:7px;background:#f1f5f9;color:#64748b}
+.result-card header strong{font-size:14px}
+.match-status{font-size:14px;padding:4px 9px;border-radius:7px;background:#f1f5f9;color:#64748b}
 .match-status.ongoing{background:#e3f6ec;color:#16654a}
 .match-status.completed{background:#eff4f7;color:#475569}
-.match-meta{font-size:11px;color:#64748b;margin:9px 0 18px}
+.match-meta{font-size:14px;color:#64748b;margin:9px 0 18px}
 .athlete-row{display:flex;align-items:center;gap:10px;margin-top:8px;padding:12px 9px;background:#f7faff;border-radius:10px}
 .athlete-row.red{background:#fff7f8}
 .athlete-row>div{flex:1;min-width:0}
-.athlete-row strong{font-size:13px;overflow-wrap:anywhere}
-.athlete-row small{display:block;font-size:10px;color:#64748b;margin-top:3px}
+.athlete-row strong{font-size:14px;overflow-wrap:anywhere}
+.athlete-row small{display:block;font-size:14px;color:#64748b;margin-top:3px}
 .corner-dot{width:4px;align-self:stretch;border-radius:4px;background:#3873d2}
 .red .corner-dot{background:#dc526d}
-.winner-label{font-size:10px;color:#167351;white-space:nowrap}
-.result-card footer{display:flex;justify-content:space-between;gap:10px;border-top:1px solid #eef2f5;margin-top:16px;padding-top:12px;font-size:11px;color:#64748b}
+.winner-label{font-size:14px;color:#167351;white-space:nowrap}
+.result-card footer{display:flex;justify-content:space-between;gap:10px;border-top:1px solid #eef2f5;margin-top:16px;padding-top:12px;font-size:14px;color:#64748b}
 .result-card footer strong{color:#334155}
 .ranking-section{background:white;border:1px solid #e2e8f0;border-radius:20px;overflow:hidden}
 .ranking-section>.section-heading{padding:22px 22px 0}
 .table-scroll{overflow-x:auto}
 table{width:100%;border-collapse:collapse;white-space:nowrap;text-align:right}
-th{font-size:11px;color:#64748b;background:#f8fafb;font-weight:500}
+th{font-size:14px;color:#64748b;background:#f8fafb;font-weight:500}
 th,td{padding:16px 18px;border-bottom:1px solid #edf1f4}
-td{font-size:13px}
+td{font-size:14px}
 .ranking-name{font-weight:700}
 .points{font-weight:900;color:#0f766e;font-size:16px}
 .rank-number{display:inline-grid;place-items:center;width:32px;height:32px;border-radius:10px;background:#f4f6f8;font-weight:700}
 .top-rank{color:#315e82;background:linear-gradient(135deg,#eaf4fc,#dcecf9);box-shadow:inset 0 0 0 1px #c5ddee}
-.scoring-help{padding:18px 22px;font-size:12px;color:#64748b}
+.scoring-help{padding:18px 22px;font-size:14px;color:#64748b}
 .scoring-help summary{cursor:pointer;color:#475569;font-weight:700}
 .scoring-help p{padding-top:12px;line-height:2}
 .error-message{background:#fff1f2;border:1px solid #fecdd3;border-radius:14px;padding:18px;color:#be123c}
 .loading-message{text-align:center;color:#64748b;padding:24px}
-.site-footer{display:flex;justify-content:space-between;gap:16px;border-top:1px solid #e2e8f0;padding-block:24px;color:#94a3b8;font-size:11px}
+.site-footer{display:flex;justify-content:space-between;gap:16px;border-top:1px solid #e2e8f0;padding-block:24px;color:#94a3b8;font-size:14px}
 .public-hub :is(a,button,input,select,summary,[tabindex]):focus-visible{outline:3px solid #40a990;outline-offset:3px}
 @media(max-width:1000px){.competition-grid,.results-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
 .welcome-aside{min-width:210px;padding-inline:24px}}
@@ -290,10 +297,10 @@ td{font-size:13px}
 .guide-cards{grid-template-columns:1fr;gap:10px}
 .guide-cards article{padding:16px;align-items:center}
 .guide-cards p{max-width:none}
-.guide-cards h2{font-size:13px;margin-bottom:3px}
+.guide-cards h2{font-size:14px;margin-bottom:3px}
 .bracket-art{width:190px;margin:auto;flex-basis:100%;padding-bottom:0}
 .bracket-art svg{max-height:95px}
-.today-date{font-size:11px;padding:8px 10px}
+.today-date{font-size:14px;padding:8px 10px}
 .competition-tabs .tab-icon{width:18px;height:18px;margin-left:5px}
 .header-inner{min-height:76px}
 .header-note{display:none}
@@ -301,33 +308,98 @@ td{font-size:13px}
 .main-content{padding-top:20px;gap:24px}
 .welcome{padding-top:4px;gap:12px;flex-direction:column}
 .welcome h1{font-size:32px}
-.welcome p{font-size:13px}
+.welcome p{font-size:14px}
 .welcome-aside{border:0;border-top:1px solid #e2e8f0;min-width:0;flex-direction:row;flex-wrap:wrap;padding:16px 0 0;justify-content:start;gap:10px}
 .welcome-aside>span:not(.calendar-mark){display:none}
-.welcome-aside strong{font-size:13px}
-.calendar-mark{font-size:11px;padding:5px 12px;border-radius:8px;border-top-width:2px;box-shadow:none}
-.welcome-aside .text-link{margin-right:auto;font-size:10px}
+.welcome-aside strong{font-size:14px}
+.calendar-mark{font-size:14px;padding:5px 12px;border-radius:8px;border-top-width:2px;box-shadow:none}
+.welcome-aside .text-link{margin-right:auto;font-size:14px}
 .search-panel{padding:16px}
 .search-row .primary-button{padding-inline:16px}
-.search-row input{font-size:12px}
+.search-row input{font-size:14px}
 .competition-grid,.results-grid{grid-template-columns:1fr}
 .competition-card{padding:20px}
 .competition-card h3{font-size:19px}
 .today-card h3{font-size:21px}
 .section-heading h2{font-size:18px}
-.section-heading p{font-size:11px}
-.count-badge{font-size:10px}
+.section-heading p{font-size:14px}
+.count-badge{font-size:14px}
 .event-heading{padding:20px}
 .event-stats{gap:14px;flex-wrap:wrap}
 .event-stats b{font-size:17px}
 .event-summary>.secondary-button{width:100%}
 .competition-tabs{grid-template-columns:repeat(2,1fr)}
-.competition-tabs button{font-size:12px;padding:12px;min-height:62px}
+.competition-tabs button{font-size:14px;padding:12px;min-height:62px}
 .filter-panel{padding:16px;gap:12px}
 .person-search{flex-basis:100%}
 .filter-panel select{min-width:160px}
-.site-footer{font-size:10px;flex-wrap:wrap}
-.result-card footer{font-size:12px}}
+.site-footer{font-size:14px;flex-wrap:wrap}
+.result-card footer{font-size:14px}}
+/* Keep readable type and touch targets at the device's actual width. */
+.public-hub{font-size:16px}
+.main-content,.competition-section,.results-section,.ranking-section{min-width:0}
+input,select{font-size:16px;min-height:48px}
+.primary-button,.secondary-button{font-size:15px;min-height:48px}
+.athlete-row strong{font-size:16px}
+.athlete-row small,.match-meta,.result-card footer{font-size:14px}
+.competition-tabs button span{font-size:14px;line-height:1.8}
+.guide-cards p,.welcome p{font-size:15px}
+.brand small,.site-footer{color:#64748b}
+.card-shortcuts a,.text-link,.back-link{min-height:44px;display:inline-flex;align-items:center}
+.mobile-rankings{display:none}
+@media screen and (max-width:900px){
+  .guide-cards{grid-template-columns:1fr}
+  .guide-cards p{max-width:none}
+  .welcome{gap:24px}
+  .welcome-aside{min-width:230px;padding-inline:12px}
+}
+@media screen and (max-width:640px){
+  .page-width{padding-inline:12px}
+  .welcome-aside{min-width:0}
+  .header-inner{gap:8px}
+  .brand{font-size:16px;gap:8px}
+  .brand small{font-size:14px}
+  .brand-mark{width:38px;height:38px;flex-shrink:0}
+  .back-link{font-size:14px;padding:8px}
+  .guide-cards h2{font-size:16px}
+  .guide-cards p,.welcome p{font-size:15px}
+  .search-row{flex-wrap:wrap}
+  .search-row input{font-size:16px;flex-basis:100%;width:100%}
+  .search-row .primary-button{width:100%}
+  .event-heading,.competition-card{padding:18px}
+  .card-top,.section-heading{align-items:start;flex-wrap:wrap}
+  .event-kind{flex:1;min-width:0;overflow-wrap:anywhere}
+  .event-tags span,.date-badge,.event-heading>p{font-size:14px}
+  .event-stats{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));width:100%;gap:12px}
+  .event-stats span{font-size:14px;padding:10px;border-radius:10px;background:#f3f8f6}
+  .event-heading .update-status{font-size:14px;align-items:baseline}
+  .status-dot{flex-shrink:0}
+  .competition-tabs{gap:6px;padding:6px}
+  .competition-tabs button{font-size:15px;padding:12px 8px;min-height:72px}
+  .competition-tabs button span{display:none}
+  .competition-tabs .tab-icon{display:block;width:24px;height:24px;margin:0 0 7px}
+  .filter-panel{align-items:stretch}
+  .filter-panel label,.person-search{width:100%;min-width:0;flex-basis:100%;font-size:14px}
+  .filter-panel input,.filter-panel select{width:100%}
+  .result-card header strong{font-size:16px}
+  .athlete-row{padding:14px 10px;flex-wrap:wrap}
+  .athlete-row .winner-label{font-size:14px}
+  .mobile-rankings{display:grid;gap:12px;padding:0 14px 14px}
+  .ranking-section .table-scroll{display:none}
+  .mobile-ranking-card{padding:16px;border:1px solid #dfe7ed;border-radius:14px}
+  .mobile-ranking-card header{display:flex;align-items:start;gap:12px}
+  .mobile-ranking-card .rank-number{flex-shrink:0;width:36px;height:36px}
+  .mobile-ranking-card h3{font-size:16px;font-weight:800;overflow-wrap:anywhere}
+  .mobile-ranking-card p{font-size:14px;color:#526477;margin-top:6px}
+  .mobile-ranking-card dl{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin-top:18px}
+  .mobile-ranking-card dt{font-size:14px;color:#64748b}
+  .mobile-ranking-card dd{font-size:16px;font-weight:700;margin-top:4px}
+  .scoring-help{font-size:15px;padding:16px}
+  .card-shortcuts{gap:8px 16px}
+  .card-shortcuts a{font-size:14px}
+  .card-actions{flex-wrap:wrap}
+  .card-actions a{font-size:15px;flex-basis:120px}
+}
 @media print{.site-header,.site-footer,.welcome,.competition-tabs,.filter-panel,.event-heading{display:none}
 .public-hub{background:white}
 .main-content{padding:0;width:100%}}
