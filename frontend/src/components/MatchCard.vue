@@ -67,7 +67,7 @@ const byeMatch = computed(() => {
 function athleteId(slot: 1 | 2) { return slot === 1 ? props.match.athlete1Id : props.match.athlete2Id }
 function athlete(id: string | null | undefined) { return id ? (athletes.value.find(x => x.id === id) ?? null) : null }
 function name(id: string | null | undefined) { return athlete(id)?.name ?? '—' }
-function club(slot: 1 | 2) { return athlete(athleteId(slot))?.club ?? '' }
+function club(slot: 1 | 2) { const a=athlete(athleteId(slot)); return a?.club || (store.currentTournament?.leagueId ? a?.coach : '') || '' }
 function ranking(slot: 1 | 2) { return athlete(athleteId(slot))?.ranking ?? null }
 
 function isWinner(slot: 1 | 2) { const id = athleteId(slot); return !!id && props.match.winnerId === id }

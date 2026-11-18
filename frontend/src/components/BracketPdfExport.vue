@@ -469,7 +469,7 @@ function athleteInfo(
         athlete?.fullName ??
         '-',
     club:
-        athlete?.club ??
+        athlete?.club || (t.value?.leagueId ? athlete?.coach : '') ||
         '',
   }
 }
@@ -1072,7 +1072,7 @@ const MatchBox = defineComponent({
               athlete?.fullName ??
               '-',
           club:
-              athlete?.club ??
+              athlete?.club || (t.value?.leagueId ? athlete?.coach : '') ||
               '',
           coach: athlete?.coach?.trim() ?? '',
         }
