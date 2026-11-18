@@ -308,6 +308,7 @@ func (a *API) Routes(router *gin.Engine) {
 		c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"message": "public registration is disabled; contact the administrator"})
 	})
 	api.POST("/auth/login", a.route(false, false, a.login))
+	api.GET("/public/competitions/:tournament/live", a.route(false, false, a.publicLiveScores))
 	api.GET("/public/ovr", a.route(false, false, a.publicOVR))
 	api.GET("/public/weigh-in", a.route(false, false, a.publicWeighIn))
 	api.POST("/auth/logout", a.route(true, false, func(r *Request) (any, error) {

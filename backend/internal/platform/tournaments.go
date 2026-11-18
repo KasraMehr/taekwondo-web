@@ -288,8 +288,12 @@ func (a *API) tournamentRoutes(org *gin.RouterGroup) {
 		if err = refreshLeagueStandings(r, tournamentID); err != nil {
 			return nil, err
 		}
+		if _, err = r.Tx.Exec(r.Context(), `DELETE FROM match_live_scores WHERE tournament_id=$1 AND match_id=$2`, tournamentID, r.C.Param("match")); err != nil {
+			return nil, err
+		}
 		return match, nil
 	}))
+	group.PUT("/:tournament/matches/:match/live", tournamentBody(a, permMatchesOperate, a.saveLiveScore))
 	group.DELETE("/:tournament/matches/:match/result", a.route(true, true, func(r *Request) (any, error) {
 		if err := r.authorizeMatch(permMatchesOverride, r.C.Param("tournament"), r.C.Param("match")); err != nil {
 			return nil, err
