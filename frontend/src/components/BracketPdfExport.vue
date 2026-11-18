@@ -1,7 +1,7 @@
 <template>
   <p v-if="printError" role="alert" class="no-print rounded-xl bg-rose-50 p-4 text-sm text-rose-700">{{ printError }}</p>
   <!-- دکمه اصلی چاپ -->
-  <div class="no-print fixed bottom-6 left-6 z-50 flex flex-wrap gap-2">
+  <div class="no-print flex flex-wrap gap-2" :class="publicTournament ? 'mb-4' : 'fixed bottom-6 left-6 z-50'">
   <button
       type="button"
       class="rounded-xl bg-slate-900 px-5 py-3 text-sm font-bold text-white shadow-xl transition hover:-translate-y-0.5 hover:bg-slate-800"
