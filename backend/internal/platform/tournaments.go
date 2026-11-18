@@ -150,11 +150,20 @@ func (a *API) tournamentRoutes(org *gin.RouterGroup) {
 		}
 		return r.Service().ApproveAllWeighIns(r.Context(), r.C.Param("tournament"))
 	}))
+	group.POST("/:tournament/refresh-seeds", tournamentBody(a, permDrawManage, func(r *Request, in struct{}) (any, error) {
+		if err := r.LeagueService().RefreshTournamentSeeds(r.Context(), r.C.Param("tournament")); err != nil {
+			return nil, err
+		}
+		return r.Service().GetByID(r.Context(), r.C.Param("tournament"))
+	}))
 	type drawInput struct {
 		Type           string `json:"type"`
 		WeightCategory string `json:"weightCategory"`
 	}
 	group.POST("/:tournament/draw", tournamentBody(a, permDrawManage, func(r *Request, in drawInput) (any, error) {
+		if err := r.LeagueService().RefreshTournamentSeeds(r.Context(), r.C.Param("tournament")); err != nil {
+			return nil, err
+		}
 		if in.Type == "" {
 			t, err := r.Service().GetByID(r.Context(), r.C.Param("tournament"))
 			if err != nil {

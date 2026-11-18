@@ -601,6 +601,19 @@ func (s *Service) SyncRoster(ctx context.Context, leagueID, tournamentID string)
 		seeds = append(seeds, x)
 	}
 	rows.Close()
+	previous, err := s.previousWeekSeeds(ctx, t)
+	if err != nil {
+		return nil, err
+	}
+	for i := range seeds {
+		if ranks, ok := previous[seeds[i].weight]; ok {
+			seeds[i].ranking = nil
+			if rank, found := ranks[seeds[i].profile]; found {
+				value := rank
+				seeds[i].ranking = &value
+			}
+		}
+	}
 	existing := map[string]tournaments.TournamentAthlete{}
 	for _, a := range t.Athletes {
 		if a.ProfileID != nil {
@@ -608,11 +621,20 @@ func (s *Service) SyncRoster(ctx context.Context, leagueID, tournamentID string)
 		}
 	}
 	for _, x := range seeds {
-		if _, ok := existing[x.profile]; ok {
+		if old, ok := existing[x.profile]; ok {
+			// Refresh already-created, unlocked weeks as well as new snapshots.
+			if _, err = s.db.Exec(ctx, `UPDATE tournament_entries SET data=jsonb_set(jsonb_set(jsonb_set(data,'{ranking}',COALESCE(to_jsonb($3::int),'null'::jsonb)),'{coach}',to_jsonb($4::text)),'{club}',to_jsonb($5::text)) WHERE tournament_id=$1 AND athlete_id=$2`, t.ID, old.ID, x.ranking, x.coach, x.club); err != nil {
+				return nil, err
+			}
 			continue
 		}
 		pid := x.profile
-		_, err = ts.AddAthlete(ctx, t.ID, tournaments.AddAthleteInput{ID: x.id, ProfileID: &pid, Name: x.name, Club: x.club, Coach: x.coach, WeightCategory: x.weight, Ranking: x.ranking})
+		created, addErr := ts.AddAthlete(ctx, t.ID, tournaments.AddAthleteInput{ID: x.id, ProfileID: &pid, Name: x.name, Club: x.club, Coach: x.coach, WeightCategory: x.weight, Ranking: x.ranking})
+		if addErr != nil {
+			return nil, addErr
+		}
+		// League membership, not the global profile's club, determines this entry's affiliation.
+		_, err = s.db.Exec(ctx, `UPDATE tournament_entries SET data=jsonb_set(jsonb_set(data,'{club}',to_jsonb($3::text)),'{coach}',to_jsonb($4::text)) WHERE tournament_id=$1 AND athlete_id=$2`, t.ID, created.ID, x.club, x.coach)
 		if err != nil {
 			return nil, err
 		}

@@ -1,5 +1,9 @@
 <template>
   <div class="bg-gradient-to-br from-slate-100 via-white to-blue-50/30 p-4 md:p-6 relative min-h-screen">
+    <div v-if="seedsLoading || seedsError" class="mb-4 rounded-xl bg-amber-50 p-4 text-amber-900">
+      {{ seedsLoading ? 'در حال دریافت رتبه‌های هفتهٔ قبل…' : seedsError }}
+      <button v-if="seedsError" @click="refreshSeeds" class="mr-3 underline">تلاش مجدد</button>
+    </div>
 
     <!-- Toast -->
     <transition-group name="toast" tag="div" class="fixed top-5 left-5 z-50 flex flex-col gap-2">
@@ -202,7 +206,7 @@
               <span class="w-6 h-6 shrink-0 rounded-full bg-white border border-slate-200 text-[11px] font-bold text-slate-500 flex items-center justify-center">{{ i + 1 }}</span>
               <div class="min-w-0 flex-1">
                 <div class="font-medium text-slate-800 truncate">{{ a.name }}</div>
-                <div v-if="a.club" class="text-xs text-slate-500 truncate">{{ a.club }}</div>
+                <div v-if="a.club || (store.currentTournament?.leagueId && a.coach)" class="text-xs text-slate-500 truncate">{{ a.club || a.coach }}</div>
               </div>
               <span v-if="a.ranking != null"
                     class="shrink-0 text-[10px] font-bold rounded px-1.5 py-0.5" :class="rankBadgeClass(a.ranking)">
@@ -402,6 +406,8 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue'
 import { useTournamentStore } from '../stores/tournament'
+import { webApi } from '../webApi'
+import type { Tournament } from '../types'
 import MatchCard from './MatchCard.vue'
 import { WEIGHT_CATEGORIES } from '../data/categories'
 import {getCurrentWindow} from "@tauri-apps/api/window";
@@ -868,6 +874,7 @@ async function runWithCinematic(label: string, action: () => void) {
 /* ==================== اکشن‌های قرعه‌کشی ==================== */
 
 function confirmDrawAll() {
+  if (seedsLoading.value || seedsError.value) return
   if (!guardRanked(weightSections.value)) return
   if (hasMatches.value && !confirm('قرعه‌کشی مجدد کل جدول؟ تمام نتایج و براکت‌ها بازنشانی می‌شود.')) return
   handleDrawAll()
@@ -887,12 +894,14 @@ async function handleDrawAll() {
 }
 
 function confirmDrawCategory(section: WeightSection) {
+  if (seedsLoading.value || seedsError.value) return
   if (!guardRanked([section])) return
   if (!confirm(`قرعه‌کشی مجدد وزن ${section.ordinal} (${section.label})؟ نتایج فعلی این وزن حذف می‌شود.`)) return
   handleDrawCategoryInternal(section)
 }
 
 async function handleDrawCategory(section: WeightSection) {
+  if (seedsLoading.value || seedsError.value) return
   if (!guardRanked([section])) return
   await handleDrawCategoryInternal(section)
 }
@@ -1037,7 +1046,26 @@ async function closeFocus() {
   await exitNativeFullscreen()
 }
 
+const seedsLoading = ref(false)
+const seedsError = ref('')
+async function refreshSeeds() {
+  const id = store.currentTournamentId
+  if (!id || !store.currentTournament?.leagueId) return
+  seedsLoading.value = true
+  seedsError.value = ''
+  try {
+    const updated = await webApi().call<Tournament>(`/tournaments/${id}/refresh-seeds`, 'POST', {})
+    store.replaceFromServer(updated)
+    if (store.currentTournamentId === id && updated.athletes.some(a => a.ranking != null)) drawType.value = 'ranked'
+  } catch {
+    seedsError.value = 'دریافت رتبه‌ها ناموفق بود؛ پیش از قرعه‌کشی دوباره تلاش کنید.'
+  } finally {
+    seedsLoading.value = false
+  }
+}
+watch(() => store.currentTournamentId, refreshSeeds)
 onMounted(() => {
+  void refreshSeeds()
   window.addEventListener('keydown', onCeremonyKey)
   document.addEventListener('fullscreenchange', onFsChange)
 })
