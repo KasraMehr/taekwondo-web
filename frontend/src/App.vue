@@ -15,6 +15,8 @@ import TeamTournamentPage from './components/TeamTournoment/TeamTournamentPage.v
 import { loadWebLeagues, loadWebTournaments, loginWeb, savedSession, saveSession } from './webApi'
 import PublicOVR from './components/PublicOVR.vue'
 import WeighInOVR from './components/WeighInOVR.vue'
+import AthletePortal from './components/AthletePortal.vue'
+import { webApi } from './webApi'
 
 const ui = useUiStore()
 const tournamentStore = useTournamentStore()
@@ -25,6 +27,8 @@ const session = ref(savedSession())
 const loading = ref(false)
 const error = ref('')
 const form = reactive({ email: '', password: '' })
+const portal = ref<any>(null)
+async function refreshPortal(){ portal.value = await webApi().call('/athlete-portal') }
 const isPublicOVR = /^\/ovr(?:\/[1-9]\d*)?\/?$/i.test(location.pathname)
 const isWeighInOVR = /^\/ovr\/weigh-in(?:\/[1-9]\d*)?\/?$/i.test(location.pathname)
 function applyUrl(){
@@ -39,6 +43,8 @@ function currentUrl(){if(ui.page==='poomsaeLeague'&&ui.poomsaeLeagueId)return `/
 async function hydrate(){
   loading.value=true;ready.value=false;error.value=''
   try {
+    await refreshPortal()
+    if (portal.value?.role === 'athlete') { ready.value=true; return }
     const [items,leagues]=await Promise.allSettled([loadWebTournaments(),loadWebLeagues()])
     for(const result of [items,leagues]) if(result.status==='rejected' && (!(result.reason instanceof ApiError)||result.reason.status!==403)) throw result.reason
     if(items.status==='fulfilled'){tournamentStore.tournaments.splice(0,tournamentStore.tournaments.length,...items.value as any);tournamentStore.save()}
@@ -49,7 +55,7 @@ async function hydrate(){
   }catch(e:any){const message=e?.message||'دریافت اطلاعات ناموفق بود';if((e instanceof ApiError&&e.status===401)||/session expired|authentication required|invalid session/i.test(message)){saveSession(null);session.value=null;ui.goHome();error.value=''}else{error.value=message;applyUrl()}}finally{loading.value=false;ready.value=true}
 }
 async function submitLogin(){loading.value=true;error.value='';try{session.value=await loginWeb(form.email,form.password);await hydrate()}catch(e:any){error.value=e?.message||'ورود ناموفق بود'}finally{loading.value=false}}
-function logout(){if(poomsaeStore.dirtyCount&&!confirm('نمرهٔ ذخیره‌نشده دارید. بدون ذخیره خارج می‌شوید؟'))return;poomsaeStore.reset();saveSession(null);session.value=null;error.value='';ui.goHome()}
+function logout(){if(poomsaeStore.dirtyCount&&!confirm('نمرهٔ ذخیره‌نشده دارید. بدون ذخیره خارج می‌شوید؟'))return;poomsaeStore.reset();saveSession(null);session.value=null;portal.value=null;error.value='';ui.goHome()}
 onMounted(()=>{if(session.value && !isPublicOVR && !isWeighInOVR)hydrate()})
 onMounted(()=>window.addEventListener('popstate',applyUrl))
 function beforeLeave(e:BeforeUnloadEvent){if(poomsaeStore.dirtyCount){e.preventDefault();e.returnValue=''}}
@@ -71,7 +77,7 @@ watch([()=>ui.page,()=>ui.tab,()=>ui.leagueTab,()=>ui.poomsaeLeagueId,()=>ui.poo
     </form>
   </div>
   <div v-else class="min-h-screen bg-slate-100 text-slate-800">
-    <header class="bg-slate-900 text-white shadow-lg">
+    <header v-if="portal?.role !== 'athlete'" class="bg-slate-900 text-white shadow-lg">
       <div class="mx-auto flex max-w-6xl items-center justify-between px-6 py-4">
         <h1 class="text-xl font-bold">🥋 قرعه‌کشی مسابقات تکواندو</h1>
         <div class="flex items-center gap-2"><button v-if="ui.page !== 'home'" @click="ui.goHome()"
@@ -80,10 +86,12 @@ watch([()=>ui.page,()=>ui.tab,()=>ui.leagueTab,()=>ui.poomsaeLeagueId,()=>ui.poo
         </button><button @click="logout" class="rounded-lg border border-slate-600 px-3 py-2 text-sm hover:bg-slate-800">خروج</button></div>
       </div>
     </header>
-    <main class="mx-auto max-w-6xl px-6 py-8">
+    <main :class="portal?.role === 'athlete' ? 'athlete-main' : 'mx-auto max-w-6xl px-6 py-8'">
       <div v-if="loading" class="mb-4 rounded-lg bg-blue-50 p-3 text-sm text-blue-700">در حال همگام‌سازی با سرور…</div>
       <div v-if="error" class="mb-4 rounded-lg bg-red-50 p-3 text-sm text-red-700">{{ error }}</div>
-      <HomePage v-if="ready && ui.page === 'home'" />
+      <AthletePortal v-if="ready && portal?.role === 'athlete' && portal?.profile" :data="portal" @refresh="refreshPortal" @logout="logout" />
+      <div v-else-if="ready && portal?.role === 'athlete'" class="rounded-xl bg-white p-6">پروفایل ورزشکار به حساب شما متصل نشده است. از مسئول برگزاری بخواهید حساب‌تان را به پروفایل ورزشکار وصل کند.</div>
+      <HomePage v-else-if="ready && ui.page === 'home'" />
       <TournamentPage v-if="ui.page === 'tournament'" />
       <TeamTournamentPage v-else-if="ui.page === 'teamTournament'" />
       <LeaguePage v-else-if="ui.page === 'league'" />
