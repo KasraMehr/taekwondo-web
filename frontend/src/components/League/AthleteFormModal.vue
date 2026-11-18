@@ -5,6 +5,9 @@ import type { AthleteDraft, LeagueAthlete } from '../../types'
 
 const props = defineProps<{
   open: boolean
+  locked?: boolean
+  initialClubId?: string | null
+  groups?: Array<{id:string;name:string}>
   /** جنسیت لیگ؛ روی ورزشکار همین ثبت می‌شود */
   gender: Gender
   /** رده سنی لیگ؛ لیست وزن‌ها از همین ساخته می‌شود */
@@ -21,6 +24,8 @@ const emit = defineEmits<{
 
 const form = reactive({
   name: '',
+  coachName: '',
+  groupId: null as string | null,
   weightCategory: null as string | null,
   clubId: null as string | null,
 })
@@ -48,10 +53,12 @@ watch(
     ([open, athlete]) => {
       if (!open) return
       form.name = athlete?.name ?? ''
-      form.clubId = athlete?.clubId ?? null
+      form.coachName = athlete?.coachName ?? ''
+      form.groupId = athlete?.groupId ?? null
+      form.clubId = athlete ? athlete.clubId : (props.initialClubId ?? null)
       // وزن قبلی فقط اگر در لیست مجاز این لیگ باشد نگه داشته می‌شود
       const prev = athlete?.weightCategory ?? null
-      form.clubId = athlete?.clubId ?? null
+      form.clubId = athlete ? athlete.clubId : (props.initialClubId ?? null)
       form.weightCategory =
           prev && weights.value.some((w) => w.value === prev) ? prev : null
       localError.value = ''
@@ -73,6 +80,8 @@ function submit() {
   localError.value = ''
   emit('submit', {
     name,
+    coachName: form.coachName.trim(),
+    groupId: form.groupId,
     gender: props.gender,
     weightCategory: form.weightCategory,
     clubId: form.clubId || null,
@@ -110,6 +119,7 @@ function submit() {
             <input
                 ref="nameInput"
                 v-model="form.name"
+                :disabled="locked"
                 required
                 autocomplete="off"
                 placeholder="مثال: علی رضایی"
@@ -122,7 +132,7 @@ function submit() {
             <select
                 v-model="form.weightCategory"
                 required
-                :disabled="weights.length === 0"
+                :disabled="locked || weights.length === 0"
                 class="w-full rounded-lg border border-slate-300 px-2 py-2 text-sm disabled:bg-slate-100"
             >
               <option :value="null" disabled>انتخاب کنید…</option>
@@ -139,6 +149,7 @@ function submit() {
             <span class="mb-1 block text-slate-600">باشگاه</span>
             <select
                 v-model="form.clubId"
+                :disabled="locked"
                 class="w-full rounded-lg border border-slate-300 px-2 py-2 text-sm"
             >
               <option :value="null">آزاد (بدون باشگاه)</option>
@@ -146,6 +157,9 @@ function submit() {
             </select>
           </label>
 
+          <label class="block text-sm"><span class="mb-1 block text-slate-600">نام مربی {{!form.clubId?'(الزامی)':''}}</span><input v-model="form.coachName" :required="!form.clubId" class="w-full rounded-lg border border-slate-300 px-3 py-2" placeholder="نام و نام خانوادگی مربی" /></label>
+          <label v-if="!form.clubId && groups?.length" class="block text-sm">گروه بازیکن آزاد<select v-model="form.groupId" :disabled="locked && !!athlete?.groupId" class="w-full rounded-lg border px-3 py-2"><option :value="null">بدون گروه</option><option v-for="g in groups" :key="g.id" :value="g.id">{{g.name}}</option></select></label>
+          <p v-if="locked" class="text-xs text-amber-700">نام مربی قابل اصلاح است و بازیکن بدون گروه را می‌توان به یک گروه موجود اختصاص داد.</p>
           <p v-if="localError || error" role="alert"
              class="rounded-lg bg-rose-50 px-3 py-2 text-xs text-rose-700">
             {{ localError || error }}
