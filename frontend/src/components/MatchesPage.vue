@@ -28,8 +28,17 @@ const selectedAiCourts = ref<Record<string, number[]>>({})
 const aiCourtsSuggested = ref(false)
 const aiSuggestedInventory = ref('')
 const aiOptions = ref({matchMinutes: 5, restMinutes: 10, startAt: 1, limitHogu: false, hoguPairs: {'1': 0, '2': 0, '3': 0, '4': 0} as Record<string, number>})
+const numberableDays = computed<number[]>(() => numberingReadiness.value?.numberableDays ?? [])
+const fullEventAiAvailable = computed(() => Boolean(
+  numberingReadiness.value?.allReady &&
+  numberableDays.value.length === (numberingReadiness.value?.readyDays?.length ?? 0),
+))
+const numberableMatches = computed(() => {
+  const days = new Set(numberableDays.value)
+  return matches.value.filter(match => days.has(match.day ?? 1))
+})
 const neededHoguSizes = computed(() => [...new Set(playableWeights.value.map(aiHoguSize))].sort())
-const playableWeights = computed(() => [...new Set(matches.value.filter(m => !m.isBye).map(m => m.weightCategory))].sort((a, b) => weightSortValue(a) - weightSortValue(b)))
+const playableWeights = computed(() => [...new Set(numberableMatches.value.filter(m => !m.isBye).map(m => m.weightCategory))].sort((a, b) => weightSortValue(a) - weightSortValue(b)))
 const aiCourtPageCount = computed(() => Math.max(1, Math.ceil(playableWeights.value.length / aiCourtPageSize)))
 const visibleAiWeights = computed(() => playableWeights.value.slice(aiCourtPage.value * aiCourtPageSize, (aiCourtPage.value + 1) * aiCourtPageSize))
 const aiHogu = computed<any>(() => (t.value as any)?.settings?.hogu ?? {})
@@ -65,6 +74,13 @@ function openAiWizard() {
   }
   selectedAiCourts.value = next
   aiWizardOpen.value = true
+}
+async function startAvailableNumbering() {
+  if (fullEventAiAvailable.value) {
+    openAiWizard()
+    return
+  }
+  await previewNumbering()
 }
 function suggestAiCourts() {
   selectedAiCourts.value = suggestHoguCourts(
@@ -129,7 +145,7 @@ async function previewAiNumbering() {
   try {
     const readiness = await webApi().call<any>(`/tournaments/${t.value.id}/draw-readiness`)
     numberingReadiness.value = readiness
-    if (!readiness.allReady) throw new Error('شماره‌گذاری هوشمند پس از آماده‌شدن همهٔ روزها فعال می‌شود؛ برای روز آماده از شماره‌گذاری عادی استفاده کنید.')
+    if (!fullEventAiAvailable.value) throw new Error('دستیار هوشمند کل مسابقه فعلاً آماده نیست؛ شماره‌گذاری روز آماده را از دکمهٔ اصلی انجام دهید.')
     numberingPreview.value = await webApi().call(`/tournaments/${t.value.id}/numbering/ai/preview`, 'POST', {courts: selectedAiCourts.value, options: aiOptions.value}, {revision: t.value.revision})
     aiStage.value = 4
   } catch (error: any) {
@@ -527,15 +543,16 @@ async function doTextSwap() {
             <h2 class="text-2xl font-black leading-tight sm:text-3xl">برنامهٔ مسابقه را با هم می‌چینیم</h2>
             <p class="mt-3 text-sm leading-7 text-sky-100">تعداد هوگوها را وارد کنید؛ زمین هر وزن را پیشنهاد می‌دهیم و پیش از ثبت، همهٔ شماره‌ها و حریف‌ها را می‌بینید.</p>
           </div>
-          <button v-if="!aiWizardOpen" :disabled="numberingBusy||rebalanceBusy||scheduleBusy||hasManualPositions||!numberingReadiness?.allReady" class="group inline-flex min-h-12 items-center gap-3 rounded-2xl bg-gradient-to-l from-cyan-400 to-sky-300 px-6 py-3 text-sm font-black text-slate-950 shadow-lg shadow-cyan-950/20 transition hover:-translate-y-0.5 hover:from-cyan-300 hover:to-white disabled:cursor-not-allowed disabled:opacity-50" @click="openAiWizard"><span>شروع شماره‌گذاری هوشمند</span><span class="text-lg transition group-hover:-translate-x-1">←</span></button>
+          <button v-if="!aiWizardOpen" :disabled="numberingBusy||rebalanceBusy||scheduleBusy||hasManualPositions||!numberableDays.length" class="group inline-flex min-h-12 items-center gap-3 rounded-2xl bg-gradient-to-l from-cyan-400 to-sky-300 px-6 py-3 text-sm font-black text-slate-950 shadow-lg shadow-cyan-950/20 transition hover:-translate-y-0.5 hover:from-cyan-300 hover:to-white disabled:cursor-not-allowed disabled:opacity-50" @click="startAvailableNumbering"><span>{{fullEventAiAvailable ? 'شروع شماره‌گذاری هوشمند' : 'شماره‌گذاری روز آماده'}}</span><span class="text-lg transition group-hover:-translate-x-1">←</span></button>
         </div>
         <div v-if="!aiWizardOpen" class="relative mt-6 flex flex-wrap gap-2 text-xs font-bold text-sky-100">
           <span class="rounded-full border border-white/20 bg-white/10 px-3 py-1.5">{{playableWeights.length}} وزن</span>
-          <span class="rounded-full border border-white/20 bg-white/10 px-3 py-1.5">{{matches.filter(m=>!m.isBye).length}} بازی</span>
+          <span class="rounded-full border border-white/20 bg-white/10 px-3 py-1.5">{{numberableMatches.filter(m=>!m.isBye).length}} بازی</span>
           <span class="rounded-full border border-white/20 bg-white/10 px-3 py-1.5">{{t?.courts??0}} زمین</span>
         </div>
         <p v-if="hasManualPositions" class="relative mt-4 rounded-xl border border-amber-300/30 bg-amber-400/10 px-4 py-2 text-xs font-bold text-amber-100">برای شروع، ابتدا چیدمان دستی را با «توزیع مجدد بازی‌ها» بازسازی کنید.</p>
-        <p v-else-if="!numberingReadiness?.allReady" class="relative mt-4 rounded-xl border border-amber-300/30 bg-amber-400/10 px-4 py-2 text-xs font-bold text-amber-100">دستیار هوشمند پس از آماده‌شدن همهٔ روزها فعال می‌شود. شماره‌گذاری عادی پایین صفحه، هر روز آماده را جداگانه ثبت می‌کند.</p>
+        <p v-else-if="numberableDays.length && !fullEventAiAvailable" class="relative mt-4 rounded-xl border border-emerald-300/30 bg-emerald-400/10 px-4 py-2 text-xs font-bold text-emerald-100">اوزان روز {{numberableDays.join('، ')}} آماده‌اند. دکمهٔ بالا فقط همین روز را شماره‌گذاری می‌کند و اوزان روز بعد دست‌نخورده می‌مانند.</p>
+        <p v-else-if="!numberableDays.length" class="relative mt-4 rounded-xl border border-amber-300/30 bg-amber-400/10 px-4 py-2 text-xs font-bold text-amber-100">برای شماره‌گذاری، وزن‌کشی و قرعهٔ حداقل یک روز را کامل کنید.</p>
       </div>
       <div v-if="aiWizardOpen" class="min-h-[38rem] bg-gradient-to-b from-sky-50/80 via-white to-slate-50 p-4 sm:p-7">
         <div class="grid grid-cols-4 gap-1.5 rounded-2xl border border-slate-200 bg-white p-2 shadow-sm sm:gap-2 sm:p-3">
@@ -551,7 +568,7 @@ async function doTextSwap() {
           </div>
           <div class="grid grid-cols-2 gap-3">
             <div class="rounded-2xl border border-blue-100 bg-white p-5 shadow-sm"><div class="text-3xl font-black text-blue-700">{{playableWeights.length}}</div><div class="mt-2 text-sm font-bold text-slate-600">وزن مسابقه</div></div>
-            <div class="rounded-2xl border border-cyan-100 bg-white p-5 shadow-sm"><div class="text-3xl font-black text-cyan-700">{{matches.filter(m=>!m.isBye).length}}</div><div class="mt-2 text-sm font-bold text-slate-600">بازی قابل اجرا</div></div>
+            <div class="rounded-2xl border border-cyan-100 bg-white p-5 shadow-sm"><div class="text-3xl font-black text-cyan-700">{{numberableMatches.filter(m=>!m.isBye).length}}</div><div class="mt-2 text-sm font-bold text-slate-600">بازی قابل اجرا</div></div>
             <div class="col-span-2 rounded-2xl border border-indigo-100 bg-gradient-to-l from-indigo-50 to-white p-5 shadow-sm"><div class="text-3xl font-black text-indigo-700">{{t?.courts??0}}</div><div class="mt-2 text-sm font-bold text-slate-600">زمین برای برنامه‌ریزی</div><p class="mt-3 text-xs leading-6 text-slate-500">زمین‌های انتخابی شما در شماره‌گذاری رعایت می‌شوند.</p></div>
           </div>
         </div>
