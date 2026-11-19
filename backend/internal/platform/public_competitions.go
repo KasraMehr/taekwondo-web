@@ -4,6 +4,7 @@ import (
 	"errors"
 	"strconv"
 	"strings"
+	"time"
 
 	"backend/internal/modules/leagues"
 	"github.com/gin-gonic/gin"
@@ -21,7 +22,7 @@ func (a *API) publicCompetitions(r *Request) (any, error) {
 			return nil, bad("invalid offset")
 		}
 	}
-	rows, err := r.Tx.Query(r.Context(), `SELECT t.id::text,t.name,t.event_date::text,t.gender,t.age_category,t.courts,COALESCE(l.name,''),o.name FROM tournaments t JOIN organizations o ON o.id=t.organization_id LEFT JOIN leagues l ON l.id=t.league_id WHERE t.event_date=(now() AT TIME ZONE 'Asia/Tehran')::date AND ($1='' OR t.name ILIKE '%' || $1 || '%' OR l.name ILIKE '%' || $1 || '%') ORDER BY CASE WHEN t.event_date=(now() AT TIME ZONE 'Asia/Tehran')::date THEN 0 WHEN t.event_date>(now() AT TIME ZONE 'Asia/Tehran')::date THEN 1 ELSE 2 END, CASE WHEN t.event_date>=(now() AT TIME ZONE 'Asia/Tehran')::date THEN t.event_date END ASC, t.event_date DESC,t.id LIMIT 51 OFFSET $2`, strings.TrimSpace(r.C.Query("q")), offset)
+	rows, err := r.Tx.Query(r.Context(), `SELECT t.id::text,t.name,((now() AT TIME ZONE 'Asia/Tehran')::date)::text,t.gender,t.age_category,t.courts,COALESCE(l.name,''),o.name FROM tournaments t JOIN organizations o ON o.id=t.organization_id LEFT JOIN leagues l ON l.id=t.league_id WHERE (t.event_date=(now() AT TIME ZONE 'Asia/Tehran')::date OR EXISTS (SELECT 1 FROM jsonb_array_elements(COALESCE(t.settings->'schedule'->'days','[]'::jsonb)) d WHERE d->>'date'=((now() AT TIME ZONE 'Asia/Tehran')::date)::text)) AND ($1='' OR t.name ILIKE '%' || $1 || '%' OR l.name ILIKE '%' || $1 || '%') ORDER BY t.updated_at DESC,t.id LIMIT 51 OFFSET $2`, strings.TrimSpace(r.C.Query("q")), offset)
 	if err != nil {
 		return nil, err
 	}
@@ -70,8 +71,40 @@ func (a *API) publicCompetition(r *Request) (any, error) {
 	if err != nil {
 		return nil, err
 	}
+	location, locationErr := time.LoadLocation("Asia/Tehran")
+	if locationErr != nil {
+		location = time.FixedZone("Asia/Tehran", 3*60*60+30*60)
+	}
+	today := time.Now().In(location).Format("2006-01-02")
+	activeDay := 0
+	if t.Settings != nil {
+		for _, day := range t.Settings.Schedule.Days {
+			if day.Date == today {
+				activeDay = day.Day
+				break
+			}
+		}
+	}
+	if activeDay == 0 && t.Date.Format("2006-01-02") == today {
+		activeDay = 1
+	}
+	responseDate := t.Date.Format("2006-01-02")
+	if activeDay > 0 {
+		responseDate = today
+	}
+	activeCategories := map[string]bool{}
+	if t.Settings != nil {
+		for category, day := range t.Settings.Schedule.CategoryDays {
+			if day == activeDay {
+				activeCategories[category] = true
+			}
+		}
+	}
 	athletes := []gin.H{}
 	for _, p := range t.Athletes {
+		if activeDay > 0 && len(activeCategories) > 0 && !activeCategories[p.WeightCategory] {
+			continue
+		}
 		affiliation := p.Club
 		if t.LeagueID != nil && affiliation == "" {
 			affiliation = p.Coach
@@ -80,6 +113,9 @@ func (a *API) publicCompetition(r *Request) (any, error) {
 	}
 	matches := []gin.H{}
 	for _, m := range t.Matches {
+		if activeDay > 0 && m.Day != activeDay {
+			continue
+		}
 		var result any
 		if m.Result != nil {
 			result = gin.H{"winType": m.Result.WinType, "winnerCorner": m.Result.WinnerCorner, "blueId": m.Result.BlueID, "redId": m.Result.RedID, "rounds": m.Result.Rounds}
@@ -151,5 +187,5 @@ func (a *API) publicCompetition(r *Request) (any, error) {
 		leagues.Rank(standings.Teams)
 	}
 	r.C.Header("Cache-Control", "public, max-age=0, s-maxage=2")
-	return gin.H{"id": t.ID, "name": t.Name, "date": t.Date, "gender": t.Gender, "ageCategory": t.AgeCategory, "courts": t.Courts, "revision": t.Revision, "athletes": athletes, "matches": matches, "standings": publicStandings(standings), "rankingScope": scope, "leagueName": leagueName, "scoring": cfg}, nil
+	return gin.H{"id": t.ID, "name": t.Name, "date": responseDate, "activeDay": activeDay, "gender": t.Gender, "ageCategory": t.AgeCategory, "courts": t.Courts, "revision": t.Revision, "athletes": athletes, "matches": matches, "standings": publicStandings(standings), "rankingScope": scope, "leagueName": leagueName, "scoring": cfg}, nil
 }

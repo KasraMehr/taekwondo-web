@@ -177,6 +177,48 @@ func TestApproveAllWeighIns(t *testing.T) {
 	}
 }
 
+func TestApproveCategoryWeighInsDoesNotTouchOtherDays(t *testing.T) {
+	s, r, id := newFixture(t)
+	enter(t, s, id, "-54", 2)
+	dayTwoIDs := []string{}
+	for _, name := range []string{"Day 2 A", "Day 2 B"} {
+		athlete, err := s.AddAthlete(context.Background(), id, AddAthleteInput{Name: name, WeightCategory: "-58"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		dayTwoIDs = append(dayTwoIDs, athlete.ID)
+	}
+	if _, err := s.DrawBracketForCategory(context.Background(), id, "-54", "random"); err != nil {
+		t.Fatal(err)
+	}
+	dayOneBefore := append([]Match(nil), r.value.Matches...)
+	updated, err := s.ApproveWeighInsForCategory(context.Background(), id, "-58")
+	if err != nil {
+		t.Fatal("another category's bracket must not block bulk approval:", err)
+	}
+	if !reflect.DeepEqual(dayOneBefore, updated.Matches) {
+		t.Fatal("category weigh-in approval changed another category's bracket")
+	}
+	approved := map[string]bool{}
+	for _, athlete := range updated.Athletes {
+		if athlete.WeightCategory == "-54" && athlete.WeighIn.WeightKg == nil {
+			t.Fatal("already measured category was modified")
+		}
+		if athlete.WeightCategory == "-58" {
+			approved[athlete.ID] = athlete.WeighIn.Status == WeighInPassed && athlete.WeighIn.WeightKg == nil && len(athlete.WeighIn.Attempts) == 0
+		}
+	}
+	for _, id := range dayTwoIDs {
+		if !approved[id] {
+			t.Fatalf("athlete %s was not approved without a fabricated measurement", id)
+		}
+	}
+	before := r.writes
+	if _, err := s.ApproveWeighInsForCategory(context.Background(), id, "-54"); !errors.Is(err, ErrBracketAlreadyDrawn) || r.writes != before {
+		t.Fatalf("drawn category approval: err=%v writes=%d want=%d", err, r.writes, before)
+	}
+}
+
 func TestLinkedProfileIdentityAndIsolation(t *testing.T) {
 	s, r, id := newFixture(t)
 	profileID := uuid.NewString()

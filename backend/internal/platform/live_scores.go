@@ -77,7 +77,7 @@ func (a *API) publicLiveScores(r *Request) (any, error) {
 	if !exists {
 		return nil, notFound()
 	}
-	rows, err := r.Tx.Query(r.Context(), `SELECT s.match_id::text,s.data,s.updated_at FROM match_live_scores s JOIN tournament_matches m ON m.tournament_id=s.tournament_id AND m.id=s.match_id WHERE s.tournament_id=$1 AND m.data->>'status'='ongoing'`, tid)
+	rows, err := r.Tx.Query(r.Context(), `SELECT s.match_id::text,s.data,s.updated_at FROM match_live_scores s JOIN tournament_matches m ON m.tournament_id=s.tournament_id AND m.id=s.match_id JOIN tournaments t ON t.id=s.tournament_id WHERE s.tournament_id=$1 AND m.data->>'status'='ongoing' AND COALESCE((m.data->>'day')::int,1)=COALESCE((SELECT (d->>'day')::int FROM jsonb_array_elements(COALESCE(t.settings->'schedule'->'days','[]'::jsonb)) d WHERE d->>'date'=((now() AT TIME ZONE 'Asia/Tehran')::date)::text LIMIT 1),CASE WHEN t.event_date=(now() AT TIME ZONE 'Asia/Tehran')::date THEN 1 ELSE 0 END)`, tid)
 	if err != nil {
 		return nil, err
 	}

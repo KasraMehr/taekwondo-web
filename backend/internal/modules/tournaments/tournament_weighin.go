@@ -98,6 +98,58 @@ func (s *tournamentService) ApproveAllWeighIns(ctx context.Context, tournamentID
 	return tournament, nil
 }
 
+// ApproveWeighInsForCategory approves one complete weight category without a
+// fabricated scale value. Brackets belonging to other categories or event
+// days do not block the operation.
+func (s *tournamentService) ApproveWeighInsForCategory(ctx context.Context, tournamentID, weightCategory string) (*Tournament, error) {
+	if s == nil || s.repository == nil {
+		return nil, fmt.Errorf("%w: tournament repository is nil", ErrInvalidTournamentInput)
+	}
+	weightCategory = strings.TrimSpace(weightCategory)
+	tournament, err := s.repository.GetByID(ctx, tournamentID)
+	if err != nil {
+		return nil, fmt.Errorf("get tournament %s before category weigh-in approval: %w", tournamentID, err)
+	}
+	if tournament == nil {
+		return nil, ErrTournamentNotFound
+	}
+	normalizeTournamentCollections(tournament)
+	if !IsValidWeightCategory(tournament.AgeCategory, tournament.Gender, weightCategory) {
+		return nil, fmt.Errorf("%w: invalid weight category %q", ErrInvalidTournamentInput, weightCategory)
+	}
+	if bracketExistsForCategory(tournament.Matches, weightCategory) {
+		return nil, fmt.Errorf("%w: reset the %s bracket before approving its weigh-ins", ErrBracketAlreadyDrawn, weightCategory)
+	}
+	found, changed := false, false
+	for i := range tournament.Athletes {
+		athlete := &tournament.Athletes[i]
+		if athlete.WeightCategory != weightCategory {
+			continue
+		}
+		found = true
+		if err := validateWeighInAthleteCategory(tournament, *athlete); err != nil {
+			return nil, err
+		}
+		if athlete.WeighIn.Status == WeighInPassed {
+			continue
+		}
+		athlete.WeighIn.Status = WeighInPassed
+		athlete.WeighedIn = true
+		changed = true
+	}
+	if !found {
+		return nil, fmt.Errorf("%w: weight category %s has no athletes", ErrNoEligibleAthletes, weightCategory)
+	}
+	if !changed {
+		return tournament, nil
+	}
+	tournament.UpdatedAt = time.Now().UTC()
+	if err := s.repository.Update(ctx, tournament); err != nil {
+		return nil, fmt.Errorf("update tournament %s after category weigh-in approval: %w", tournamentID, err)
+	}
+	return tournament, nil
+}
+
 // PreviewWeighIn وزن را بررسی می‌کند، اما چیزی در دیتابیس ذخیره نمی‌کند.
 func (s *tournamentService) PreviewWeighIn(
 	ctx context.Context,

@@ -28,7 +28,7 @@ func suggestNumbering(ctx context.Context, t *tournaments.Tournament, selectedCo
 	}
 	counts := map[string]int{}
 	for _, m := range t.Matches {
-		if m.IsBye == nil || !*m.IsBye {
+		if _, selected := selectedCourts[m.WeightCategory]; selected && (m.IsBye == nil || !*m.IsBye) {
 			counts[m.WeightCategory]++
 		}
 	}

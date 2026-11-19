@@ -50,7 +50,7 @@ func (a *API) tournamentRoutes(org *gin.RouterGroup) {
 			"scheduleModes":      []gin.H{{"value": "single_court", "label": "همه بازی‌ها روی یک زمین"}, {"value": "split_halves", "label": "دو نیمه جدول روی دو زمین تا فینال"}, {"value": "balanced", "label": "بلوک‌های وزن با توازن زمین‌ها"}},
 			"numberingScopes":    []gin.H{{"value": "tournament", "label": "شماره یکتا در کل تورنومنت"}, {"value": "day", "label": "شروع مجدد در هر روز"}, {"value": "court_day", "label": "شروع مجدد برای هر زمین در هر روز"}},
 			"numberingOrders":    []gin.H{{"value": "category", "label": "اولویت وزن‌های سبک‌تر در هر مرحله"}, {"value": "rounds", "label": "اولویت دورها، سپس ترتیب قرعه"}},
-			"dayAssignments":     []gin.H{{"value": "manual", "label": "انتخاب دستی روز هر وزن"}, {"value": "alternating", "label": "جایگاه‌های فرد روز اول، زوج روز دوم"}},
+			"dayAssignments":     []gin.H{{"value": "manual", "label": "انتخاب دستی روز هر وزن"}, {"value": "alternating", "label": "اوزان فرد روز اول، زوج روز دوم"}, {"value": "alternating_reverse", "label": "اوزان زوج روز اول، فرد روز دوم"}},
 			"finalCourtPolicies": []gin.H{{"value": "primary", "label": "زمین اصلی همان وزن"}, {"value": "fixed", "label": "زمین منتخب برای فینال‌ها"}},
 			"ageCategories":      tournaments.AgeCategories(),
 		}, nil
@@ -149,6 +149,11 @@ func (a *API) tournamentRoutes(org *gin.RouterGroup) {
 			return nil, err
 		}
 		return r.Service().ApproveAllWeighIns(r.Context(), r.C.Param("tournament"))
+	}))
+	group.POST("/:tournament/weigh-in/approve-category", tournamentBody(a, permWeighInManage, func(r *Request, in struct {
+		WeightCategory string `json:"weightCategory"`
+	}) (any, error) {
+		return r.Service().ApproveWeighInsForCategory(r.Context(), r.C.Param("tournament"), in.WeightCategory)
 	}))
 	group.POST("/:tournament/refresh-seeds", tournamentBody(a, permDrawManage, func(r *Request, in struct{}) (any, error) {
 		if err := r.LeagueService().RefreshTournamentSeeds(r.Context(), r.C.Param("tournament")); err != nil {

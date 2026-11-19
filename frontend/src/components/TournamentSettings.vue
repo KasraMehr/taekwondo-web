@@ -33,7 +33,15 @@ async function load(){if(!tournament.value)return;loading.value=true;error.value
 async function saveWeighInTime(){if(!tournament.value||!weighInTime.value)return;savingWeighInTime.value=true;error.value='';try{const local=new Date(weighInTime.value+':00+03:30');await webApi().call(`/tournaments/${tournament.value.id}/weigh-in-time`,'PUT',{at:local.toISOString()});message.value='ساعت دقیق وزن‌کشی ثبت شد'}catch(e:any){error.value=e?.message||'ثبت ساعت وزن‌کشی ناموفق بود'}finally{savingWeighInTime.value=false}}
 async function saveDate(){const t=tournament.value;if(!t||!dateInput.value)return;savingDate.value=true;error.value='';message.value='';try{const isoDate=isoFromJalali(dateInput.value);const updated=await webApi().call<any>(`/tournaments/${t.id}`,'PUT',{name:t.name,date:isoDate,courts:t.courts,gender:t.gender,ageCategory:t.ageCategory,format:t.format,leagueId:t.leagueId??null,stageOrder:t.stageOrder??null,weekId:t.weekId??null,groupId:t.groupId??null,teamTournamentId:t.teamTournamentId??null});store.replaceFromServer(updated);await load();message.value='تاریخ مسابقه ذخیره شد'}catch(e:any){error.value=e?.message||'تغییر تاریخ ناموفق بود'}finally{savingDate.value=false}}
 function normalizeDateInput(){try{dateInput.value=jalaliFromIso(isoFromJalali(dateInput.value))}catch{/* show validation when saving */}}
-function ensureDays(){const base=tournament.value?.date.slice(0,10)||new Date().toISOString().slice(0,10);const second=new Date(`${base}T00:00:00Z`);second.setUTCDate(second.getUTCDate()+1);settings.schedule.days=[{day:1,date:base,label:'روز اول'},{day:2,date:second.toISOString().slice(0,10),label:'روز دوم'}];for(const day of settings.schedule.days)dayDateInputs[day.day]=jalaliFromIso(day.date)}
+function ensureDays(){if(settings.schedule.days.length>=2)return;settings.schedule.dayAssignment="alternating";const base=tournament.value?.date.slice(0,10)||new Date().toISOString().slice(0,10);const second=new Date(`${base}T00:00:00Z`);second.setUTCDate(second.getUTCDate()+1);settings.schedule.days=[{day:1,date:base,label:'روز اول'},{day:2,date:second.toISOString().slice(0,10),label:'روز دوم'}];for(const day of settings.schedule.days)dayDateInputs[day.day]=jalaliFromIso(day.date)}
+function categoryDay(category:string,index:number){
+ if(settings.schedule.dayAssignment==='alternating')return index%2+1
+ if(settings.schedule.dayAssignment==='alternating_reverse')return 2-index%2
+ return settings.schedule.categoryDays?.[category]||1
+}
+function changeDayAssignment(){
+ settings.schedule.categoryDays=Object.fromEntries(categories.value.map((category,index)=>[category,categoryDay(category,index)]))
+}
 function clearSecondDay(){settings.schedule.days=settings.schedule.days.slice(0,1);settings.schedule.dayAssignment='manual';settings.schedule.categoryDays={}}
 async function save(){
   const event = tournament.value
@@ -41,6 +49,7 @@ async function save(){
   saving.value=true;error.value='';message.value=''
   fillDefaultHoguSizes()
   try {
+    if(settings.schedule.days.length===2)changeDayAssignment()
     const days=settings.schedule.days.map((day:any)=>({...day,date:isoFromJalali(dayDateInputs[day.day]||'')}))
     const payload={scoring:{...settings.scoring},weighIn:{...settings.weighIn},draw:{...settings.draw},schedule:{...settings.schedule,days,categoryDays:{...settings.schedule.categoryDays}},numbering:{...settings.numbering},hogu:{enabled:Boolean(settings.hogu.enabled),courtSizes:{...settings.hogu.courtSizes},categorySizes:{...settings.hogu.categorySizes},pairCounts:{...settings.hogu.pairCounts}}}
     const updated=await store.saveTournamentSettings(event.id,payload)
@@ -74,7 +83,19 @@ onMounted(load)
             </div>
           </div>
         </section>
-        <section class="settings-card"><div class="settings-title"><span class="settings-index">۴</span><div><h4>روزهای برگزاری</h4><p>اجرای یک‌روزه یا تقسیم اوزان در دو روز</p></div></div><div class="mb-4 flex gap-2"><button class="choice-button" :class="settings.schedule.days.length<2?'choice-active':''" @click="clearSecondDay">یک روز</button><button class="choice-button" :class="settings.schedule.days.length>=2?'choice-active':''" @click="ensureDays">دو روز</button></div><div v-if="settings.schedule.days.length>=2" class="settings-grid"><label>روش تقسیم اوزان<select v-model="settings.schedule.dayAssignment"><option v-for="o in options.dayAssignments" :key="o.value" :value="o.value">{{o.label}}</option></select></label><label v-for="day in settings.schedule.days" :key="day.day">{{day.label}} (شمسی)<input v-model="dayDateInputs[day.day]" type="text" inputmode="numeric" dir="ltr" placeholder="۱۴۰۵/۰۷/۱۱"></label></div></section>
+        <section class="settings-card"><div class="settings-title"><span class="settings-index">۴</span><div><h4>روزهای برگزاری</h4><p>اجرای یک‌روزه یا تقسیم اوزان در دو روز</p></div></div><div class="mb-4 flex gap-2"><button class="choice-button" :class="settings.schedule.days.length<2?'choice-active':''" @click="clearSecondDay">یک روز</button><button class="choice-button" :class="settings.schedule.days.length>=2?'choice-active':''" @click="ensureDays">دو روز</button></div><div v-if="settings.schedule.days.length>=2" class="settings-grid"><label>روش تقسیم اوزان<select v-model="settings.schedule.dayAssignment" @change="changeDayAssignment"><option v-for="o in options.dayAssignments" :key="o.value" :value="o.value">{{o.label}}</option></select></label><label v-for="day in settings.schedule.days" :key="day.day">{{day.label}} (شمسی)<input v-model="dayDateInputs[day.day]" type="text" inputmode="numeric" dir="ltr" placeholder="۱۴۰۵/۰۷/۱۱"></label></div>
+<div v-if="settings.schedule.days.length>=2" class="mt-4 space-y-3">
+<p class="text-xs leading-6 text-slate-500">فرد و زوج بر اساس ترتیب دسته‌های وزنی است: وزن‌های ۱، ۳، ۵… فرد و وزن‌های ۲، ۴، ۶… زوج هستند.</p>
+<div v-if="settings.schedule.dayAssignment==='manual'" class="settings-grid">
+<label v-for="(category,index) in categories" :key="category">وزن {{(index+1).toLocaleString('fa-IR')}} ({{category}})
+<select :value="categoryDay(category,index)" @change="settings.schedule.categoryDays[category]=Number(($event.target as HTMLSelectElement).value)">
+<option :value="1">روز اول</option><option :value="2">روز دوم</option>
+</select></label></div>
+<div class="grid gap-3 sm:grid-cols-2">
+<div v-for="day in settings.schedule.days" :key="day.day" class="rounded-xl border border-blue-100 bg-blue-50/50 p-3">
+<h5 class="mb-2 text-sm font-bold text-blue-900">{{day.label}}</h5>
+<ul class="space-y-1 text-sm text-slate-700"><template v-for="(category,index) in categories" :key="category"><li v-if="categoryDay(category,index)===day.day">وزن {{(index+1).toLocaleString('fa-IR')}} · <b dir="ltr">{{category}}</b></li></template></ul>
+</div></div></div></section>
         <section class="settings-card"><div class="settings-title"><span class="settings-index">۵</span><div><h4>شماره‌گذاری بازی‌ها</h4><p>پس از تکمیل قرعه همه اوزان اعمال می‌شود</p></div></div><div class="settings-grid"><label>مدت تخمینی هر بازی (دقیقه)<input v-model.number="settings.schedule.matchMinutes" type="number" min="1" max="60"></label><label>حداقل استراحت بین دو بازی (دقیقه)<input v-model.number="settings.schedule.restMinutes" type="number" min="0" max="120"></label><label>شماره شروع<input v-model.number="settings.numbering.startAt" type="number" min="1"></label><label>محدوده شماره<select v-model="settings.numbering.scope"><option v-for="o in options.numberingScopes" :key="o.value" :value="o.value">{{o.label}}</option></select></label><label class="sm:col-span-2">ترتیب شماره‌گذاری<select v-model="settings.numbering.order"><option v-for="o in options.numberingOrders" :key="o.value" :value="o.value">{{o.label}}</option></select></label></div></section>
       </div>
     </template>

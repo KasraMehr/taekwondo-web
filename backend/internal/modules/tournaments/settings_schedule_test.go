@@ -161,3 +161,159 @@ func TestHoguSettingsReassignOldManualCourt(t *testing.T) {
 		}
 	}
 }
+
+func TestTwoDayWeightParityDirections(t *testing.T) {
+	for _, mode := range []string{"alternating", "alternating_reverse"} {
+		t.Run(mode, func(t *testing.T) {
+			s, r, id := newFixture(t)
+			enter(t, s, id, "-54", 4)
+			enter(t, s, id, "-58", 4)
+			if _, err := s.DrawBracket(context.Background(), id, "ranking"); err != nil {
+				t.Fatal(err)
+			}
+			settings := settingsFor(r.value)
+			settings.Schedule.Days = append(settings.Schedule.Days, EventDay{Day: 2, Date: "2026-10-02", Label: "day 2"})
+			settings.Schedule.DayAssignment = mode
+			updated, err := s.UpdateSettings(context.Background(), id, settings)
+			if err != nil {
+				t.Fatal(err)
+			}
+			for i, category := range WeightOptions(updated.AgeCategory, updated.Gender) {
+				expected := i%2 + 1
+				if mode == "alternating_reverse" {
+					expected = 3 - expected
+				}
+				if updated.Settings.Schedule.CategoryDays[category] != expected {
+					t.Fatalf("%s assigned to wrong day", category)
+				}
+				for _, match := range updated.Matches {
+					if match.WeightCategory == category && match.Day != expected {
+						t.Fatalf("match %s day=%d want %d", match.ID, match.Day, expected)
+					}
+				}
+			}
+			loaded, err := s.GetByID(context.Background(), id)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !reflect.DeepEqual(loaded.Settings.Schedule, updated.Settings.Schedule) {
+				t.Fatal("day selection not persisted")
+			}
+			settings = settingsFor(loaded)
+			settings.Schedule.Days = settings.Schedule.Days[:1]
+			oneDay, err := s.UpdateSettings(context.Background(), id, settings)
+			if err != nil {
+				t.Fatal(err)
+			}
+			for _, match := range oneDay.Matches {
+				if match.Day != 1 {
+					t.Fatal("second-day match survived one-day conversion")
+				}
+			}
+		})
+	}
+}
+
+func TestDelayedSecondDayWeighInDrawAndNumberingPreservesDayOne(t *testing.T) {
+	ctx := context.Background()
+	s, r, id := newFixture(t)
+	settings := settingsFor(r.value)
+	settings.Schedule.Days = append(settings.Schedule.Days, EventDay{Day: 2, Date: "2026-10-02", Label: "روز دوم"})
+	settings.Schedule.DayAssignment = "alternating"
+	settings.Numbering.Scope = "tournament"
+	if _, err := s.UpdateSettings(ctx, id, settings); err != nil {
+		t.Fatal(err)
+	}
+	enter(t, s, id, "-54", 4)
+	dayTwoAthletes := []string{}
+	for _, name := range []string{"day-two-a", "day-two-b", "day-two-c", "day-two-d"} {
+		athlete, err := s.AddAthlete(ctx, id, AddAthleteInput{Name: name, Club: "day two", WeightCategory: "-58"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		dayTwoAthletes = append(dayTwoAthletes, athlete.ID)
+	}
+	if _, err := s.DrawBracketForCategory(ctx, id, "-54", "ranking"); err != nil {
+		t.Fatal(err)
+	}
+	readiness := CheckDrawReadiness(r.value)
+	if !readiness.Ready || !reflect.DeepEqual(readiness.ReadyDays, []int{1}) {
+		t.Fatalf("day one should be independently ready: %#v", readiness)
+	}
+	if !reflect.DeepEqual(readiness.NumberableDays, []int{1}) {
+		t.Fatalf("day one should be available to guided numbering: %#v", readiness)
+	}
+	options := &GuidedNumberingOptions{MatchMinutes: 6, RestMinutes: 12, StartAt: 21}
+	preview, err := s.NumberMatchesWithPlan(ctx, id, true, []string{"-54"}, map[string][]int{"-54": {1}}, options)
+	if err != nil {
+		t.Fatal("guided preview must ignore pending day-two weigh-ins:", err)
+	}
+	for _, match := range preview.Matches {
+		if match.Day == 1 && !lifecycleIsBye(&match) && match.MatchNumber == nil {
+			t.Fatal("guided preview left a day-one match unnumbered")
+		}
+	}
+	if _, err := s.NumberMatchesWithPlan(ctx, id, false, []string{"-54"}, map[string][]int{"-54": {1}}, options); err != nil {
+		t.Fatal(err)
+	}
+	readiness = CheckDrawReadiness(r.value)
+	if !reflect.DeepEqual(readiness.NumberableDays, []int{1}) {
+		t.Fatalf("a numbered but unstarted day must remain replannable: %#v", readiness)
+	}
+	var firstMatch string
+	for _, match := range r.value.Matches {
+		if match.Day == 1 && !lifecycleIsBye(&match) && match.Athlete1ID != nil && match.Athlete2ID != nil {
+			firstMatch = match.ID
+			break
+		}
+	}
+	if firstMatch == "" {
+		t.Fatal("day one has no startable match")
+	}
+	if _, err := s.StartMatch(ctx, id, firstMatch); err != nil {
+		t.Fatal(err)
+	}
+	dayOneBefore := []Match{}
+	for _, match := range r.value.Matches {
+		if match.Day == 1 {
+			dayOneBefore = append(dayOneBefore, match)
+		}
+	}
+	for _, athleteID := range dayTwoAthletes {
+		if _, err := s.RecordWeighIn(ctx, id, athleteID, RecordWeighInInput{WeightKg: 58}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := s.DrawBracketForCategory(ctx, id, "-58", "ranking"); err != nil {
+		t.Fatal("day two draw must remain available after day one starts:", err)
+	}
+	if _, err := s.NumberMatches(ctx, id, false); err != nil {
+		t.Fatal("day two numbering must remain available after day one starts:", err)
+	}
+	dayOneAfter := []Match{}
+	dayTwoNumbered := false
+	dayOneMaximum := 0
+	dayTwoMinimum := int(^uint(0) >> 1)
+	for _, match := range r.value.Matches {
+		if match.Day == 1 {
+			dayOneAfter = append(dayOneAfter, match)
+			if match.MatchNumber != nil && *match.MatchNumber > dayOneMaximum {
+				dayOneMaximum = *match.MatchNumber
+			}
+		} else if match.Day == 2 && !lifecycleIsBye(&match) {
+			if match.MatchNumber == nil {
+				t.Fatal("day two match was not numbered")
+			}
+			dayTwoNumbered = true
+			if *match.MatchNumber < dayTwoMinimum {
+				dayTwoMinimum = *match.MatchNumber
+			}
+		}
+	}
+	if !reflect.DeepEqual(dayOneBefore, dayOneAfter) {
+		t.Fatal("preparing day two changed day-one matches")
+	}
+	if !dayTwoNumbered || dayTwoMinimum <= dayOneMaximum {
+		t.Fatal("tournament-wide numbers did not continue on day two")
+	}
+}
