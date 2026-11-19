@@ -150,6 +150,11 @@ func (a *API) tournamentRoutes(org *gin.RouterGroup) {
 		}
 		return r.Service().ApproveAllWeighIns(r.Context(), r.C.Param("tournament"))
 	}))
+	group.POST("/:tournament/weigh-in/approve-category", tournamentBody(a, permWeighInManage, func(r *Request, in struct {
+		WeightCategory string `json:"weightCategory"`
+	}) (any, error) {
+		return r.Service().ApproveWeighInsForCategory(r.Context(), r.C.Param("tournament"), in.WeightCategory)
+	}))
 	group.POST("/:tournament/refresh-seeds", tournamentBody(a, permDrawManage, func(r *Request, in struct{}) (any, error) {
 		if err := r.LeagueService().RefreshTournamentSeeds(r.Context(), r.C.Param("tournament")); err != nil {
 			return nil, err

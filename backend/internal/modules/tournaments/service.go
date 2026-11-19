@@ -102,6 +102,7 @@ type TournamentService interface {
 	ResetWeighIn(context.Context, string, string) (*TournamentAthlete, error)
 	ClearWeighInSignature(context.Context, string, string) (*TournamentAthlete, error)
 	ApproveAllWeighIns(context.Context, string) (*Tournament, error)
+	ApproveWeighInsForCategory(context.Context, string, string) (*Tournament, error)
 	Create(
 		ctx context.Context,
 		input CreateTournamentInput,
