@@ -173,6 +173,16 @@
         </button>
 
         <button
+            v-if="stat.approvable > 0 && !hasBracketForCategory(stat.weight)"
+            type="button"
+            :disabled="bulkApprovingCategory === stat.weight"
+            class="mt-3 w-full rounded-lg bg-emerald-600 px-2 py-1.5 text-xs font-bold text-white hover:bg-emerald-700 disabled:opacity-50"
+            @click.stop="approveCategory(stat)"
+        >
+          {{ bulkApprovingCategory === stat.weight ? 'در حال تأیید…' : 'تأیید همهٔ این وزن' }}
+        </button>
+
+        <button
             v-if="hasBracketForCategory(stat.weight)"
             type="button"
             class="mt-3 w-full rounded-lg border border-red-200 bg-red-50 px-2 py-1.5 text-xs font-medium text-red-700 hover:bg-red-100"
@@ -689,6 +699,7 @@ const filterStatus = ref('')
 const groupBy = ref('weight')
 const searchInput = ref(null)
 const bulkApproving = ref(false)
+const bulkApprovingCategory = ref('')
 const printOpen = ref(false)
 const printMaxAttempts = ref(MAX_ATTEMPTS)
 const athleteNumbers = computed(() => weighInNumbers(athletes.value, weights.value))
@@ -735,6 +746,20 @@ async function approveAll() {
     return
   }
   notify(`وزن‌کشی ${toFa(result.count)} ورزشکار تأیید شد`)
+}
+
+async function approveCategory(stat) {
+  const remaining = stat.approvable
+  if (!remaining || bulkApprovingCategory.value) return
+  if (!confirm(`وزن‌کشی ${toFa(remaining)} ورزشکار دستهٔ ${stat.weight} بدون ثبت عدد وزن، یک‌جا تأیید شود؟`)) return
+  bulkApprovingCategory.value = stat.weight
+  const result = await store.approveCategoryWeighIns(tid.value, stat.weight)
+  bulkApprovingCategory.value = ''
+  if (result.error) {
+    notify(result.error)
+    return
+  }
+  notify(`وزن‌کشی ${toFa(result.count)} ورزشکار دستهٔ ${stat.weight} تأیید شد`)
 }
 
 function focusSearch() {
@@ -1087,6 +1112,7 @@ const weightStats = computed(() =>
             index: i + 1,
             count: list.length,
             done: list.filter(isFinal).length,
+            approvable: list.filter(a => statusOf(a) !== 'passed').length,
             complete: list.length > 0 && list.every(isFinal),
           }
         })
