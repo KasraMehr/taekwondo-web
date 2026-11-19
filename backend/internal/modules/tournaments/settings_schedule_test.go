@@ -161,3 +161,55 @@ func TestHoguSettingsReassignOldManualCourt(t *testing.T) {
 		}
 	}
 }
+
+func TestTwoDayWeightParityDirections(t *testing.T) {
+	for _, mode := range []string{"alternating", "alternating_reverse"} {
+		t.Run(mode, func(t *testing.T) {
+			s, r, id := newFixture(t)
+			enter(t, s, id, "-54", 4)
+			enter(t, s, id, "-58", 4)
+			if _, err := s.DrawBracket(context.Background(), id, "ranking"); err != nil {
+				t.Fatal(err)
+			}
+			settings := settingsFor(r.value)
+			settings.Schedule.Days = append(settings.Schedule.Days, EventDay{Day: 2, Date: "2026-10-02", Label: "day 2"})
+			settings.Schedule.DayAssignment = mode
+			updated, err := s.UpdateSettings(context.Background(), id, settings)
+			if err != nil {
+				t.Fatal(err)
+			}
+			for i, category := range WeightOptions(updated.AgeCategory, updated.Gender) {
+				expected := i%2 + 1
+				if mode == "alternating_reverse" {
+					expected = 3 - expected
+				}
+				if updated.Settings.Schedule.CategoryDays[category] != expected {
+					t.Fatalf("%s assigned to wrong day", category)
+				}
+				for _, match := range updated.Matches {
+					if match.WeightCategory == category && match.Day != expected {
+						t.Fatalf("match %s day=%d want %d", match.ID, match.Day, expected)
+					}
+				}
+			}
+			loaded, err := s.GetByID(context.Background(), id)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !reflect.DeepEqual(loaded.Settings.Schedule, updated.Settings.Schedule) {
+				t.Fatal("day selection not persisted")
+			}
+			settings = settingsFor(loaded)
+			settings.Schedule.Days = settings.Schedule.Days[:1]
+			oneDay, err := s.UpdateSettings(context.Background(), id, settings)
+			if err != nil {
+				t.Fatal(err)
+			}
+			for _, match := range oneDay.Matches {
+				if match.Day != 1 {
+					t.Fatal("second-day match survived one-day conversion")
+				}
+			}
+		})
+	}
+}

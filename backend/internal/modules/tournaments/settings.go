@@ -210,10 +210,10 @@ func validateSettings(t *Tournament, s TournamentSettings) error {
 	if s.Schedule.FinalCourtPolicy != "primary" && s.Schedule.FinalCourtPolicy != "fixed" {
 		return invalid("finalCourtPolicy must be primary or fixed")
 	}
-	if s.Schedule.DayAssignment != "manual" && s.Schedule.DayAssignment != "alternating" {
-		return invalid("dayAssignment must be manual or alternating")
+	if s.Schedule.DayAssignment != "manual" && s.Schedule.DayAssignment != "alternating" && s.Schedule.DayAssignment != "alternating_reverse" {
+		return invalid("dayAssignment must be manual, alternating or alternating_reverse")
 	}
-	if s.Schedule.DayAssignment == "alternating" && len(s.Schedule.Days) != 2 {
+	if (s.Schedule.DayAssignment == "alternating" || s.Schedule.DayAssignment == "alternating_reverse") && len(s.Schedule.Days) != 2 {
 		return invalid("alternating assignment requires two days")
 	}
 	if s.Numbering.StartAt < 1 || s.Numbering.StartAt > 1000000 {
@@ -308,10 +308,14 @@ func (s *tournamentService) UpdateSettings(ctx context.Context, id string, input
 	if len(input.Schedule.Days) == 1 {
 		input.Schedule.DayAssignment = "manual"
 		input.Schedule.CategoryDays = map[string]int{}
-	} else if input.Schedule.DayAssignment == "alternating" {
+	} else if input.Schedule.DayAssignment == "alternating" || input.Schedule.DayAssignment == "alternating_reverse" {
 		input.Schedule.CategoryDays = map[string]int{}
 		for i, cat := range WeightOptions(t.AgeCategory, t.Gender) {
-			input.Schedule.CategoryDays[cat] = i%2 + 1
+			day := i%2 + 1
+			if input.Schedule.DayAssignment == "alternating_reverse" {
+				day = 3 - day
+			}
+			input.Schedule.CategoryDays[cat] = day
 		}
 	}
 	applyDefaultHoguSizes(t, &input.Hogu)
