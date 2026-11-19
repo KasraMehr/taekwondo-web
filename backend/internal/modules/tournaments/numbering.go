@@ -15,6 +15,14 @@ func hasStartedMatches(t *Tournament) bool {
 	}
 	return false
 }
+func hasStartedMatchesForDay(t *Tournament, day int) bool {
+	for _, m := range t.Matches {
+		if m.Day == day && !lifecycleIsBye(&m) && (lifecycleHasResult(&m) || lifecycleMatchStatus(&m) == MatchStatusOngoing) {
+			return true
+		}
+	}
+	return false
+}
 func clearMatchNumbers(t *Tournament) {
 	for i := range t.Matches {
 		t.Matches[i].MatchNumber = nil
@@ -26,14 +34,42 @@ func clearMatchNumbers(t *Tournament) {
 
 type DrawReadiness struct {
 	Ready               bool     `json:"ready"`
+	AllReady            bool     `json:"allReady"`
+	ReadyDays           []int    `json:"readyDays"`
+	NumberableDays      []int    `json:"numberableDays"`
 	PendingWeighIns     []string `json:"pendingWeighIns"`
 	UndrawnCategories   []string `json:"undrawnCategories"`
 	NoContestCategories []string `json:"noContestCategories"`
 }
 
 func CheckDrawReadiness(t *Tournament) DrawReadiness {
+	result := DrawReadiness{ReadyDays: []int{}, NumberableDays: []int{}, PendingWeighIns: []string{}, UndrawnCategories: []string{}, NoContestCategories: []string{}}
+	for day := 1; day <= len(settingsFor(t).Schedule.Days); day++ {
+		dayResult := checkDrawReadinessForDay(t, day)
+		result.PendingWeighIns = append(result.PendingWeighIns, dayResult.PendingWeighIns...)
+		result.UndrawnCategories = append(result.UndrawnCategories, dayResult.UndrawnCategories...)
+		result.NoContestCategories = append(result.NoContestCategories, dayResult.NoContestCategories...)
+		if dayResult.Ready {
+			result.ReadyDays = append(result.ReadyDays, day)
+			for _, match := range t.Matches {
+				if match.Day == day && !lifecycleIsBye(&match) && match.MatchNumber == nil && !hasStartedMatchesForDay(t, day) {
+					result.NumberableDays = append(result.NumberableDays, day)
+					break
+				}
+			}
+		}
+	}
+	result.Ready = len(result.ReadyDays) > 0
+	result.AllReady = len(result.ReadyDays) == len(settingsFor(t).Schedule.Days)
+	return result
+}
+
+func checkDrawReadinessForDay(t *Tournament, day int) DrawReadiness {
 	result := DrawReadiness{PendingWeighIns: []string{}, UndrawnCategories: []string{}, NoContestCategories: []string{}}
 	for _, cat := range WeightOptions(t.AgeCategory, t.Gender) {
+		if dayForCategory(t, cat) != day {
+			continue
+		}
 		total, passed := 0, 0
 		pending := false
 		for _, a := range t.Athletes {
@@ -60,10 +96,20 @@ func CheckDrawReadiness(t *Tournament) DrawReadiness {
 			result.NoContestCategories = append(result.NoContestCategories, cat)
 		}
 	}
-	result.Ready = len(t.Matches) > 0 && len(result.PendingWeighIns) == 0 && len(result.UndrawnCategories) == 0
+	hasMatches := false
+	for _, match := range t.Matches {
+		if match.Day == day && !lifecycleIsBye(&match) {
+			hasMatches = true
+			break
+		}
+	}
+	result.Ready = hasMatches && len(result.PendingWeighIns) == 0 && len(result.UndrawnCategories) == 0
 	return result
 }
-func allDrawsComplete(t *Tournament) bool { return CheckDrawReadiness(t).Ready }
+func allDrawsComplete(t *Tournament) bool {
+	readiness := CheckDrawReadiness(t)
+	return len(readiness.ReadyDays) == len(settingsFor(t).Schedule.Days)
+}
 
 // Numbering runs only after the entire event's draws are complete. Preview has no writes.
 func (s *tournamentService) NumberMatches(ctx context.Context, id string, preview bool) (*Tournament, error) {
@@ -92,6 +138,9 @@ func (s *tournamentService) numberMatchesWithPriority(ctx context.Context, id st
 	t, err := s.GetByID(ctx, id)
 	if err != nil {
 		return nil, err
+	}
+	if len(settingsFor(t).Schedule.Days) > 1 && options == nil && courts == nil && len(priority) == 0 && (!allDrawsComplete(t) || hasStartedMatches(t)) {
+		return s.numberReadyDays(ctx, t, preview)
 	}
 	if !allDrawsComplete(t) {
 		return nil, fmt.Errorf("%w: finish all weigh-ins and category draws before numbering", ErrMatchLocked)
@@ -212,6 +261,89 @@ func (s *tournamentService) numberMatchesWithPriority(ctx context.Context, id st
 	}
 	t.UpdatedAt = time.Now().UTC()
 	if err = s.repository.Update(ctx, t); err != nil {
+		return nil, err
+	}
+	return t, nil
+}
+
+// numberReadyDays schedules only complete, not-yet-numbered event days. This
+// lets day two be weighed in and drawn after day one has already been held,
+// without rewriting any saved day-one court, order, time or match number.
+func (s *tournamentService) numberReadyDays(ctx context.Context, t *Tournament, preview bool) (*Tournament, error) {
+	readiness := CheckDrawReadiness(t)
+	if t.CourtAssignment == nil {
+		t.CourtAssignment = map[string][]int{}
+	}
+	ready := map[int]bool{}
+	for _, day := range readiness.ReadyDays {
+		ready[day] = true
+	}
+	changed := false
+	for day := 1; day <= len(settingsFor(t).Schedule.Days); day++ {
+		if !ready[day] || hasStartedMatchesForDay(t, day) {
+			continue
+		}
+		needsNumbers := false
+		for _, match := range t.Matches {
+			if match.Day == day && !lifecycleIsBye(&match) && match.MatchNumber == nil {
+				needsNumbers = true
+				break
+			}
+		}
+		if !needsNumbers {
+			continue
+		}
+		dayTournament := *t
+		dayTournament.Matches = nil
+		dayTournament.CourtAssignment = map[string][]int{}
+		for _, match := range t.Matches {
+			if match.Day == day {
+				dayTournament.Matches = append(dayTournament.Matches, match)
+			}
+		}
+		if settingsFor(t).Numbering.Scope == "tournament" {
+			maximum := settingsFor(t).Numbering.StartAt - 1
+			for _, match := range t.Matches {
+				if match.Day != day && match.MatchNumber != nil && *match.MatchNumber > maximum {
+					maximum = *match.MatchNumber
+				}
+			}
+			settings := settingsFor(&dayTournament)
+			settings.Numbering.StartAt = maximum + 1
+			dayTournament.Settings = &settings
+		}
+		clearMatchNumbers(&dayTournament)
+		if err := applyCourtPlan(&dayTournament); err != nil {
+			return nil, err
+		}
+		if err := buildScheduleTimelineWithPlan(&dayTournament, false, nil, nil); err != nil {
+			return nil, err
+		}
+		if err := assignMatchNumbers(&dayTournament); err != nil {
+			return nil, err
+		}
+		planned := map[string]Match{}
+		for _, match := range dayTournament.Matches {
+			planned[match.ID] = match
+		}
+		for i := range t.Matches {
+			if match, ok := planned[t.Matches[i].ID]; ok {
+				t.Matches[i] = match
+			}
+		}
+		for category, assigned := range dayTournament.CourtAssignment {
+			t.CourtAssignment[category] = assigned
+		}
+		changed = true
+	}
+	if !changed {
+		return nil, fmt.Errorf("%w: no complete unnumbered event day is available", ErrMatchLocked)
+	}
+	if preview {
+		return t, nil
+	}
+	t.UpdatedAt = time.Now().UTC()
+	if err := s.repository.Update(ctx, t); err != nil {
 		return nil, err
 	}
 	return t, nil

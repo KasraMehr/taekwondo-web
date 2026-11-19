@@ -220,7 +220,8 @@ func (s *tournamentService) DrawBracketForCategory(
 		)
 	}
 
-	if hasStartedMatches(tournament) {
+	categoryDay := dayForCategory(tournament, weightCategory)
+	if hasStartedMatchesForDay(tournament, categoryDay) {
 		return nil, ErrMatchLocked
 	}
 	for _, a := range tournament.Athletes {
@@ -260,7 +261,17 @@ func (s *tournamentService) DrawBracketForCategory(
 		)
 	}
 
-	clearMatchNumbers(tournament)
+	for i := range tournament.Matches {
+		if tournament.Matches[i].Day == categoryDay {
+			tournament.Matches[i].MatchNumber = nil
+			tournament.Matches[i].ScheduledStartMinute = nil
+			tournament.Matches[i].ScheduledEndMinute = nil
+			tournament.Matches[i].ScheduledWaitMinutes = 0
+		}
+	}
+	for i := range categoryMatches {
+		categoryMatches[i].Day = categoryDay
+	}
 	tournament.Matches = append(
 		tournament.Matches,
 		categoryMatches...,
@@ -271,7 +282,7 @@ func (s *tournamentService) DrawBracketForCategory(
 	}
 
 	tournament.CourtAssignment[weightCategory] = categoryCourts
-	if err := applyCourtPlan(tournament); err != nil {
+	if err := applyCourtPlanForDay(tournament, categoryDay); err != nil {
 		return nil, err
 	}
 	tournament.UpdatedAt = time.Now().UTC()

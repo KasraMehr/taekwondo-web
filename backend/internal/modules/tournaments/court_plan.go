@@ -126,6 +126,38 @@ func applyCourtPlanSingleDay(t *Tournament) {
 	t.CourtAssignment = assignment
 }
 
+// applyCourtPlanForDay isolates court planning to one event day. Other days
+// may already be running or completed and must remain byte-for-byte stable.
+func applyCourtPlanForDay(t *Tournament, day int) error {
+	dayTournament := *t
+	dayTournament.Matches = nil
+	dayTournament.CourtAssignment = map[string][]int{}
+	for _, match := range t.Matches {
+		if match.Day == day {
+			dayTournament.Matches = append(dayTournament.Matches, match)
+		}
+	}
+	if err := applyCourtPlan(&dayTournament); err != nil {
+		return err
+	}
+	planned := map[string]Match{}
+	for _, match := range dayTournament.Matches {
+		planned[match.ID] = match
+	}
+	for i := range t.Matches {
+		if match, ok := planned[t.Matches[i].ID]; ok {
+			t.Matches[i] = match
+		}
+	}
+	if t.CourtAssignment == nil {
+		t.CourtAssignment = map[string][]int{}
+	}
+	for category, courts := range dayTournament.CourtAssignment {
+		t.CourtAssignment[category] = courts
+	}
+	return nil
+}
+
 // A large bracket can use two fixed halves; smaller categories stay on one court.
 func categoryCourtCount(playable, available int) int {
 	if playable >= 16 && available >= 2 {
