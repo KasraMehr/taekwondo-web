@@ -56,7 +56,7 @@ func (a *API) publicOVR(r *Request) (any, error) {
 			return nil, err
 		}
 	} else {
-		err := r.Tx.QueryRow(r.Context(), `SELECT t.id::text FROM tournaments t WHERE EXISTS(SELECT 1 FROM tournament_matches m WHERE m.tournament_id=t.id AND COALESCE((m.data->>'isBye')::boolean,false)=false AND m.data->>'status' IN ('ongoing','pending')) ORDER BY t.event_date DESC,t.updated_at DESC LIMIT 1`).Scan(&id)
+		err := r.Tx.QueryRow(r.Context(), `SELECT t.id::text FROM tournaments t WHERE (t.event_date=(now() AT TIME ZONE 'Asia/Tehran')::date OR EXISTS (SELECT 1 FROM jsonb_array_elements(COALESCE(t.settings->'schedule'->'days','[]'::jsonb)) d WHERE d->>'date'=((now() AT TIME ZONE 'Asia/Tehran')::date)::text)) AND EXISTS(SELECT 1 FROM tournament_matches m WHERE m.tournament_id=t.id AND COALESCE((m.data->>'isBye')::boolean,false)=false AND m.data->>'status' IN ('ongoing','pending')) ORDER BY t.updated_at DESC LIMIT 1`).Scan(&id)
 		if errors.Is(err, pgx.ErrNoRows) {
 			return gin.H{"tournament": nil, "courts": []any{}}, nil
 		}
@@ -67,7 +67,8 @@ func (a *API) publicOVR(r *Request) (any, error) {
 	var name string
 	var courts int
 	var revision int64
-	if err := r.Tx.QueryRow(r.Context(), `SELECT name,courts,revision FROM tournaments WHERE id=$1`, id).Scan(&name, &courts, &revision); err != nil {
+	var activeDay int
+	if err := r.Tx.QueryRow(r.Context(), `SELECT name,courts,revision,COALESCE((SELECT (d->>'day')::int FROM jsonb_array_elements(COALESCE(settings->'schedule'->'days','[]'::jsonb)) d WHERE d->>'date'=((now() AT TIME ZONE 'Asia/Tehran')::date)::text LIMIT 1),CASE WHEN event_date=(now() AT TIME ZONE 'Asia/Tehran')::date THEN 1 ELSE 0 END) FROM tournaments WHERE id=$1`, id).Scan(&name, &courts, &revision, &activeDay); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, notFound()
 		}
@@ -110,6 +111,9 @@ func (a *API) publicOVR(r *Request) (any, error) {
 			return nil, err
 		}
 		if m.IsBye != nil && *m.IsBye {
+			continue
+		}
+		if activeDay == 0 || m.Day != activeDay {
 			continue
 		}
 		matches = append(matches, m)
@@ -166,5 +170,5 @@ func (a *API) publicOVR(r *Request) (any, error) {
 		}
 		resultCourts = append(resultCourts, gin.H{"court": court, "current": active, "upcoming": upcoming})
 	}
-	return gin.H{"tournament": gin.H{"id": id, "name": name, "courts": courts, "revision": revision}, "courts": resultCourts}, nil
+	return gin.H{"tournament": gin.H{"id": id, "name": name, "courts": courts, "revision": revision, "activeDay": activeDay}, "courts": resultCourts}, nil
 }
