@@ -240,8 +240,25 @@ func TestDelayedSecondDayWeighInDrawAndNumberingPreservesDayOne(t *testing.T) {
 	if !readiness.Ready || !reflect.DeepEqual(readiness.ReadyDays, []int{1}) {
 		t.Fatalf("day one should be independently ready: %#v", readiness)
 	}
-	if _, err := s.NumberMatches(ctx, id, false); err != nil {
+	if !reflect.DeepEqual(readiness.NumberableDays, []int{1}) {
+		t.Fatalf("day one should be available to guided numbering: %#v", readiness)
+	}
+	options := &GuidedNumberingOptions{MatchMinutes: 6, RestMinutes: 12, StartAt: 21}
+	preview, err := s.NumberMatchesWithPlan(ctx, id, true, []string{"-54"}, map[string][]int{"-54": {1}}, options)
+	if err != nil {
+		t.Fatal("guided preview must ignore pending day-two weigh-ins:", err)
+	}
+	for _, match := range preview.Matches {
+		if match.Day == 1 && !lifecycleIsBye(&match) && match.MatchNumber == nil {
+			t.Fatal("guided preview left a day-one match unnumbered")
+		}
+	}
+	if _, err := s.NumberMatchesWithPlan(ctx, id, false, []string{"-54"}, map[string][]int{"-54": {1}}, options); err != nil {
 		t.Fatal(err)
+	}
+	readiness = CheckDrawReadiness(r.value)
+	if !reflect.DeepEqual(readiness.NumberableDays, []int{1}) {
+		t.Fatalf("a numbered but unstarted day must remain replannable: %#v", readiness)
 	}
 	var firstMatch string
 	for _, match := range r.value.Matches {

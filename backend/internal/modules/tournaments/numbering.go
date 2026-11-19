@@ -51,8 +51,11 @@ func CheckDrawReadiness(t *Tournament) DrawReadiness {
 		result.NoContestCategories = append(result.NoContestCategories, dayResult.NoContestCategories...)
 		if dayResult.Ready {
 			result.ReadyDays = append(result.ReadyDays, day)
-			for _, match := range t.Matches {
-				if match.Day == day && !lifecycleIsBye(&match) && match.MatchNumber == nil && !hasStartedMatchesForDay(t, day) {
+			if !hasStartedMatchesForDay(t, day) {
+				for _, match := range t.Matches {
+					if match.Day != day || lifecycleIsBye(&match) {
+						continue
+					}
 					result.NumberableDays = append(result.NumberableDays, day)
 					break
 				}
@@ -139,8 +142,8 @@ func (s *tournamentService) numberMatchesWithPriority(ctx context.Context, id st
 	if err != nil {
 		return nil, err
 	}
-	if len(settingsFor(t).Schedule.Days) > 1 && options == nil && courts == nil && len(priority) == 0 && (!allDrawsComplete(t) || hasStartedMatches(t)) {
-		return s.numberReadyDays(ctx, t, preview)
+	if len(settingsFor(t).Schedule.Days) > 1 && (!allDrawsComplete(t) || hasStartedMatches(t)) {
+		return s.numberReadyDays(ctx, t, preview, priority, courts, options)
 	}
 	if !allDrawsComplete(t) {
 		return nil, fmt.Errorf("%w: finish all weigh-ins and category draws before numbering", ErrMatchLocked)
@@ -266,31 +269,92 @@ func (s *tournamentService) numberMatchesWithPriority(ctx context.Context, id st
 	return t, nil
 }
 
-// numberReadyDays schedules only complete, not-yet-numbered event days. This
-// lets day two be weighed in and drawn after day one has already been held,
-// without rewriting any saved day-one court, order, time or match number.
-func (s *tournamentService) numberReadyDays(ctx context.Context, t *Tournament, preview bool) (*Tournament, error) {
+// numberReadyDays schedules or replans only complete, unstarted event days.
+// This lets each day use guided numbering as soon as its own weigh-ins and
+// draws are ready, without waiting for or rewriting another event day.
+func (s *tournamentService) numberReadyDays(ctx context.Context, t *Tournament, preview bool, priority []string, courts map[string][]int, options *GuidedNumberingOptions) (*Tournament, error) {
 	readiness := CheckDrawReadiness(t)
 	if t.CourtAssignment == nil {
 		t.CourtAssignment = map[string][]int{}
 	}
 	ready := map[int]bool{}
-	for _, day := range readiness.ReadyDays {
+	for _, day := range readiness.NumberableDays {
 		ready[day] = true
+	}
+	targetCategories := map[string]bool{}
+	for _, match := range t.Matches {
+		if ready[match.Day] && !lifecycleIsBye(&match) {
+			targetCategories[match.WeightCategory] = true
+		}
+	}
+	if len(targetCategories) == 0 {
+		return nil, fmt.Errorf("%w: no complete event day is available for numbering", ErrMatchLocked)
+	}
+	if options != nil {
+		if options.MatchMinutes < 1 || options.MatchMinutes > 60 || options.RestMinutes < 0 || options.RestMinutes > 120 || options.StartAt < 1 || options.StartAt > 1000000 {
+			return nil, fmt.Errorf("%w: invalid guided numbering settings", ErrInvalidTournamentInput)
+		}
+		settings := settingsFor(t)
+		settings.Schedule.MatchMinutes = options.MatchMinutes
+		settings.Schedule.RestMinutes = options.RestMinutes
+		settings.Numbering.StartAt = options.StartAt
+		applyDefaultHoguSizes(t, &settings.Hogu)
+		settings.Hogu.Enabled = options.LimitHogu
+		if options.LimitHogu {
+			settings.Hogu.PairCounts = map[string]int{}
+			settings.Hogu.CourtSizes = map[int][]string{}
+			for size, count := range options.HoguPairs {
+				if !validHoguSize(size) || count < 0 || count > 100 {
+					return nil, fmt.Errorf("%w: invalid hogu inventory", ErrInvalidTournamentInput)
+				}
+				settings.Hogu.PairCounts[size] = count
+				if count > 0 {
+					for court := 1; court <= t.Courts; court++ {
+						settings.Hogu.CourtSizes[court] = append(settings.Hogu.CourtSizes[court], size)
+					}
+				}
+			}
+		} else {
+			settings.Hogu.PairCounts = nil
+		}
+		t.Settings = &settings
+	}
+	if courts != nil {
+		if len(courts) != len(targetCategories) {
+			return nil, fmt.Errorf("%w: select courts for every playable category", ErrInvalidTournamentInput)
+		}
+		settings := settingsFor(t)
+		for category, selected := range courts {
+			if !targetCategories[category] || len(selected) < 1 || len(selected) > 2 {
+				return nil, fmt.Errorf("%w: invalid court selection", ErrInvalidTournamentInput)
+			}
+			seen := map[int]bool{}
+			for _, court := range selected {
+				if court < 1 || court > t.Courts || seen[court] {
+					return nil, fmt.Errorf("%w: invalid court selection", ErrInvalidTournamentInput)
+				}
+				if settings.Hogu.Enabled && !containsString(settings.Hogu.CourtSizes[court], settings.Hogu.CategorySizes[category]) {
+					return nil, fmt.Errorf("%w: selected court has incompatible hogu", ErrInvalidCourt)
+				}
+				seen[court] = true
+			}
+		}
+	}
+	if len(priority) > 0 {
+		seen := map[string]bool{}
+		for _, category := range priority {
+			if !targetCategories[category] || seen[category] {
+				return nil, fmt.Errorf("%w: invalid category priority", ErrInvalidTournamentInput)
+			}
+			seen[category] = true
+		}
+		if len(seen) != len(targetCategories) {
+			return nil, fmt.Errorf("%w: select every playable category", ErrInvalidTournamentInput)
+		}
 	}
 	changed := false
 	for day := 1; day <= len(settingsFor(t).Schedule.Days); day++ {
 		if !ready[day] || hasStartedMatchesForDay(t, day) {
-			continue
-		}
-		needsNumbers := false
-		for _, match := range t.Matches {
-			if match.Day == day && !lifecycleIsBye(&match) && match.MatchNumber == nil {
-				needsNumbers = true
-				break
-			}
-		}
-		if !needsNumbers {
 			continue
 		}
 		dayTournament := *t
@@ -312,11 +376,32 @@ func (s *tournamentService) numberReadyDays(ctx context.Context, t *Tournament, 
 			settings.Numbering.StartAt = maximum + 1
 			dayTournament.Settings = &settings
 		}
-		clearMatchNumbers(&dayTournament)
-		if err := applyCourtPlan(&dayTournament); err != nil {
-			return nil, err
+		if hasManualSchedule(&dayTournament) && (courts != nil || len(priority) > 0) {
+			return nil, fmt.Errorf("%w: guided numbering requires an automatic court schedule", ErrMatchLocked)
 		}
-		if err := buildScheduleTimelineWithPlan(&dayTournament, false, nil, nil); err != nil {
+		clearMatchNumbers(&dayTournament)
+		dayCourts := map[string][]int(nil)
+		if courts == nil {
+			if err := applyCourtPlan(&dayTournament); err != nil {
+				return nil, err
+			}
+		} else {
+			dayCourts = map[string][]int{}
+			for category := range targetCategories {
+				if dayForCategory(t, category) == day {
+					dayCourts[category] = courts[category]
+					assignCategoryCourts(dayTournament.Matches, category, courts[category])
+				}
+			}
+			syncCategoryOrders(&dayTournament)
+		}
+		dayPriority := make([]string, 0, len(priority))
+		for _, category := range priority {
+			if dayForCategory(t, category) == day {
+				dayPriority = append(dayPriority, category)
+			}
+		}
+		if err := buildScheduleTimelineWithPlan(&dayTournament, false, dayPriority, dayCourts); err != nil {
 			return nil, err
 		}
 		if err := assignMatchNumbers(&dayTournament); err != nil {
@@ -337,7 +422,7 @@ func (s *tournamentService) numberReadyDays(ctx context.Context, t *Tournament, 
 		changed = true
 	}
 	if !changed {
-		return nil, fmt.Errorf("%w: no complete unnumbered event day is available", ErrMatchLocked)
+		return nil, fmt.Errorf("%w: no complete event day is available for numbering", ErrMatchLocked)
 	}
 	if preview {
 		return t, nil
