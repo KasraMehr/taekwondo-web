@@ -1,6 +1,23 @@
 <!-- StandingsPage.vue -->
 <template>
-  <div ref="rootEl">
+  <div ref="rootEl" :class="!publicTournament ? 'pb-72' : ''">
+    <aside v-if="!publicTournament && hasMatches" class="fixed bottom-3 left-3 right-3 z-40 rounded-2xl border border-blue-200 bg-white p-3 shadow-xl sm:right-auto sm:w-80 print:hidden" aria-label="دسترسی سریع زمین‌ها">
+      <button class="flex w-full items-center justify-between text-sm font-bold text-slate-800" @click="courtsExpanded = !courtsExpanded" :aria-expanded="courtsExpanded">
+        <span>بازی‌های در حال اجرا · {{ ongoingMatches.length }}</span><span>{{ courtsExpanded ? 'جمع کردن −' : 'نمایش +' }}</span>
+      </button>
+      <div v-if="courtsExpanded" class="mt-3 max-h-52 space-y-2 overflow-y-auto">
+        <div v-for="court in courtRows" :key="court.number" class="rounded-xl border border-slate-200 p-2">
+          <div class="flex items-center justify-between text-sm font-bold"><span>زمین <b dir="ltr">{{ courtLabel(court.number) }}</b></span><span v-if="!court.matches.length" class="text-xs font-normal text-slate-500">بازی در حال اجرا ندارد</span></div>
+          <button v-for="match in court.matches" :key="match.id" :disabled="openingMatch" class="mt-2 w-full rounded-lg bg-blue-50 p-2 text-right hover:bg-blue-100 disabled:opacity-50" @click="openMatch(match)">
+            <div class="flex items-center justify-between"><b dir="ltr" class="text-xl font-black text-blue-800">{{ matchLabel(match) }}</b><span class="text-xs text-emerald-700">روز {{ match.day ?? 1 }} · در حال اجرا</span></div>
+            <div class="mt-1 text-sm text-blue-700">{{ athleteMap.get(match.athlete1Id ?? '')?.name ?? '—' }}</div>
+            <div class="text-sm text-red-700">{{ athleteMap.get(match.athlete2Id ?? '')?.name ?? '—' }}</div>
+            <div class="mt-1 text-xs text-slate-600">وزن {{ match.weightCategory }} · ادامه ثبت امتیاز ←</div>
+          </button>
+        </div>
+      </div>
+      <p v-if="courtRefreshError" class="mt-2 text-xs text-red-700">{{ courtRefreshError }}</p>
+    </aside>
     <!-- فیلتر وزن‌ها -->
     <div class="flex items-center justify-center gap-2 mb-6 flex-wrap print:hidden">
       <button
@@ -217,6 +234,21 @@ function isPlayable(m: any) {
 }
 
 const openingMatch=ref(false)
+const courtsExpanded = ref(true)
+const courtRefreshError = ref('')
+const courtLabel = (court: number) => String.fromCharCode(64 + court)
+const matchLabel = (match: Match) => `${courtLabel(match.court)}${match.matchNumber && match.matchNumber > 0 ? match.matchNumber : '—'}`
+const ongoingMatches = computed(() => allMatches.value.filter(m => !m.isBye && !m.winnerId && m.status === 'ongoing'))
+const courtRows = computed(() => Array.from({length: store.currentTournament?.courts ?? 0}, (_, i) => ({number: i + 1, matches: ongoingMatches.value.filter(m => m.court === i + 1)})))
+let refreshTimer: ReturnType<typeof setInterval> | undefined
+let refreshing = false
+async function refreshCourts() {
+  if (props.publicTournament || activeMatchId.value || openingMatch.value || refreshing || !store.currentTournament) return
+  refreshing = true
+  try { await store.refreshFromServer(store.currentTournament.id); courtRefreshError.value = '' }
+  catch { courtRefreshError.value = 'به‌روزرسانی زمین‌ها ناموفق بود؛ اتصال را بررسی کنید.' }
+  finally { refreshing = false }
+}
 async function openMatch(m: any) {
   if (!isPlayable(m)) return
   if(openingMatch.value)return
@@ -224,6 +256,16 @@ async function openMatch(m: any) {
   else {
     openingMatch.value=true
     try{
+      await store.refreshFromServer(store.currentTournament!.id)
+      m = allMatches.value.find(item => item.id === m.id)
+      if (!m) return
+      if (m.winnerId) { detailsMatchId.value = m.id; return }
+      const occupied = ongoingMatches.value.find(item => item.id !== m.id && item.court === m.court && (item.day ?? 1) === (m.day ?? 1))
+      if (occupied) {
+        courtsExpanded.value = true
+        alert(`زمین ${courtLabel(m.court)} در اختیار بازی ${matchLabel(occupied)} است. از پنل زمین‌ها همان بازی را باز کنید و ابتدا نتیجه‌اش را ثبت کنید.`)
+        return
+      }
       if(m.status!=='ongoing'){
         const started=await webApi().call(`/tournaments/${store.currentTournament!.id}/matches/${m.id}/start`,'POST')
         Object.assign(m,started)
@@ -265,6 +307,7 @@ let ro: ResizeObserver | null = null
 let rafId = 0
 
 onMounted(() => {
+  if (!props.publicTournament) { void refreshCourts(); refreshTimer = setInterval(refreshCourts, 5000) }
   if (!rootEl.value) return
   containerWidth.value = rootEl.value.clientWidth || 1200
   if (typeof ResizeObserver === 'undefined') return
@@ -280,6 +323,7 @@ onMounted(() => {
 })
 
 onBeforeUnmount(() => {
+  if (refreshTimer) clearInterval(refreshTimer)
   ro?.disconnect()
   if (rafId) cancelAnimationFrame(rafId)
 })
