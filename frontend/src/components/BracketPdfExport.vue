@@ -15,6 +15,7 @@
           : `خروجی PDF ${getWeightLabel(selectedCategory)}`
     }}
   </button>
+  <button v-if="!publicTournament" type="button" class="rounded-xl border border-slate-300 bg-white px-5 py-3 text-sm font-bold text-slate-800 shadow" :disabled="!pages.length || printBusy" @click="print(true)">چاپ بدون شماره‌گذاری</button>
   </div>
 
   <div
@@ -1324,7 +1325,7 @@ function getWeightLabel(category: string): string {
 }
 
 
-async function print(): Promise<void> {
+async function print(withoutNumbers = false): Promise<void> {
   if (!await refreshPrintData()) return
   await document.fonts.ready
   await nextTick()
@@ -1332,7 +1333,8 @@ async function print(): Promise<void> {
   requestAnimationFrame(() => {
     requestAnimationFrame(() => {
       document.body.classList.add('bracket-print-mode')
-      window.addEventListener('afterprint', () => { document.body.classList.remove('bracket-print-mode') }, { once: true })
+      if (withoutNumbers && !props.publicTournament) document.body.classList.add('bracket-print-no-numbers')
+      window.addEventListener('afterprint', () => { document.body.classList.remove('bracket-print-mode', 'bracket-print-no-numbers') }, { once: true })
       window.print()
     })
   })
@@ -1387,6 +1389,9 @@ async function refreshPrintData(): Promise<boolean> {
 </script>
 
 <style>
+@media print {
+  body.bracket-print-no-numbers #bracket-print-root .match-tag { visibility: hidden !important; }
+}
 /* =========================================================
    Page header
    ========================================================= */
