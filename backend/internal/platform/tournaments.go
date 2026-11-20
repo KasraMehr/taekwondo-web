@@ -222,7 +222,8 @@ func (a *API) tournamentRoutes(org *gin.RouterGroup) {
 			return nil, httpError{409, "finish weigh-ins and draws before AI numbering"}
 		}
 		for _, match := range t.Matches {
-			if match.MovedAt != nil {
+			_, selected := input.Courts[match.WeightCategory]
+			if selected && match.MovedAt != nil {
 				return nil, httpError{409, "AI numbering requires an automatic schedule; manual court positions are present"}
 			}
 		}

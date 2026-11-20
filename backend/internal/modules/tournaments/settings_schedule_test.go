@@ -287,6 +287,9 @@ func TestDelayedSecondDayWeighInDrawAndNumberingPreservesDayOne(t *testing.T) {
 	if _, err := s.DrawBracketForCategory(ctx, id, "-58", "ranking"); err != nil {
 		t.Fatal("day two draw must remain available after day one starts:", err)
 	}
+	if _, err := s.RebalanceCourts(ctx, id); err != nil {
+		t.Fatal("day two rebalance must remain available after day one starts:", err)
+	}
 	if _, err := s.NumberMatches(ctx, id, false); err != nil {
 		t.Fatal("day two numbering must remain available after day one starts:", err)
 	}
