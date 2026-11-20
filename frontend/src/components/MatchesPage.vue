@@ -124,7 +124,7 @@ async function confirmAiCourts() {
 }
 let aiTimer: ReturnType<typeof setInterval> | undefined
 const aiSteps = ['بررسی قرعه‌ها و وزن‌کشی', 'بررسی ظرفیت زمین‌ها', 'طراحی اولویت وزن‌ها', 'کنترل استراحت و مسیر براکت', 'ساخت پیش‌نمایش نهایی']
-const hasManualPositions = computed(() => matches.value.some(match => Boolean(match.movedAt)))
+const hasManualPositions = computed(() => numberableMatches.value.some(match => Boolean(match.movedAt)))
 onUnmounted(() => { if (aiTimer) clearInterval(aiTimer) })
 
 async function previewAiNumbering() {
@@ -154,16 +154,15 @@ const rebalanceMessage = ref('')
 const rebalanceError = ref('')
 
 const canRebalanceCurrentDraw = computed(() =>
-  Boolean(t.value?.matches.length) &&
-  !matches.value.some(match =>
-    !match.isBye && Boolean(match.winnerId || match.result || match.status === 'ongoing')
-  )
+  matches.value.some(candidate => !candidate.isBye && !matches.value.some(match =>
+    (match.day ?? 1) === (candidate.day ?? 1) && !match.isBye && Boolean(match.winnerId || match.result || match.status === 'ongoing')
+  ))
 )
 
 async function rebalanceCurrentDraw() {
   if (!t.value || !canRebalanceCurrentDraw.value || rebalanceBusy.value) return
   const accepted = window.confirm(
-    'قرعه و حریف‌ها حفظ می‌شوند، اما تخصیص دستی زمین‌ها و شماره‌های فعلی بازی‌ها دوباره محاسبه خواهند شد. ادامه می‌دهید؟'
+    'چیدمان و شماره‌های روزهایی که هنوز شروع نشده‌اند بازسازی می‌شوند. نتایج روزهای شروع‌شده حفظ می‌شوند. ادامه می‌دهید؟'
   )
   if (!accepted) return
 

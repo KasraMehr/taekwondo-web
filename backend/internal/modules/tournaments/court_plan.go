@@ -331,7 +331,51 @@ func (s *tournamentService) RebalanceCourts(ctx context.Context, id string) (*To
 		return nil, err
 	}
 	if hasStartedMatches(t) {
-		return nil, ErrMatchLocked
+		if len(settingsFor(t).Schedule.Days) < 2 {
+			return nil, ErrMatchLocked
+		}
+		changed := false
+		for _, day := range settingsFor(t).Schedule.Days {
+			if hasStartedMatchesForDay(t, day.Day) {
+				continue
+			}
+			subset := *t
+			subset.Matches = nil
+			subset.CourtAssignment = map[string][]int{}
+			indices := []int{}
+			for i, match := range t.Matches {
+				if match.Day == day.Day {
+					subset.Matches = append(subset.Matches, match)
+					indices = append(indices, i)
+				}
+			}
+			if len(indices) == 0 {
+				continue
+			}
+			clearManualSchedule(&subset)
+			clearMatchNumbers(&subset)
+			if err := applyCourtPlan(&subset); err != nil {
+				return nil, err
+			}
+			for j, i := range indices {
+				t.Matches[i] = subset.Matches[j]
+			}
+			if t.CourtAssignment == nil {
+				t.CourtAssignment = map[string][]int{}
+			}
+			for category, courts := range subset.CourtAssignment {
+				t.CourtAssignment[category] = courts
+			}
+			changed = true
+		}
+		if !changed {
+			return nil, ErrMatchLocked
+		}
+		t.UpdatedAt = time.Now().UTC()
+		if err := s.repository.Update(ctx, t); err != nil {
+			return nil, err
+		}
+		return t, nil
 	}
 	clearManualSchedule(t)
 	clearMatchNumbers(t)
