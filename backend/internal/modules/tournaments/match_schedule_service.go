@@ -52,10 +52,10 @@ func (s *tournamentService) SetMatchNumber(
 		return nil, err
 	}
 
-	if hasStartedMatches(tournament) {
+	if hasStartedMatchesForDay(tournament, tournament.Matches[index].Day) {
 		return nil, ErrMatchLocked
 	}
-	if !allDrawsComplete(tournament) {
+	if !checkDrawReadinessForDay(tournament, tournament.Matches[index].Day).Ready {
 		return nil, fmt.Errorf("%w: finish weigh-ins and draws for all categories before numbering", ErrMatchLocked)
 	}
 	match := &tournament.Matches[index]
@@ -362,7 +362,10 @@ func (s *tournamentService) SwapMatchPositions(
 		return nil, err
 	}
 
-	if hasStartedMatches(tournament) {
+	if tournament.Matches[firstIndex].Day != tournament.Matches[secondIndex].Day {
+		return nil, fmt.Errorf("%w: cannot swap matches across event days", ErrInvalidMatchPosition)
+	}
+	if hasStartedMatchesForDay(tournament, tournament.Matches[firstIndex].Day) {
 		return nil, ErrMatchLocked
 	}
 	first := &tournament.Matches[firstIndex]
@@ -429,7 +432,7 @@ func (s *tournamentService) SwapMatchPositions(
 		}
 	}
 
-	if err := buildScheduleTimeline(updated, true); err != nil {
+	if err := rebuildManualDay(updated, first.Day, false); err != nil {
 		return nil, err
 	}
 	now := time.Now().UTC()
@@ -456,7 +459,7 @@ func (s *tournamentService) SwapMatchPositions(
 func (s *tournamentService) schedulingMoveLoadedMatch(
 	ctx context.Context, tournament *Tournament, index int, court int, order int, sourceLabel *string,
 ) (*Match, error) {
-	if hasStartedMatches(tournament) {
+	if hasStartedMatchesForDay(tournament, tournament.Matches[index].Day) {
 		return nil, ErrMatchLocked
 	}
 	match := &tournament.Matches[index]
@@ -499,20 +502,15 @@ func (s *tournamentService) schedulingMoveLoadedMatch(
 			updated.Matches[i].Order = pos + 1
 		}
 	}
-	if err := buildScheduleTimeline(updated, true); err != nil {
-		return nil, err
-	}
 	numbered := false
 	for _, m := range tournament.Matches {
-		if m.MatchNumber != nil {
+		if m.Day == match.Day && m.MatchNumber != nil {
 			numbered = true
 			break
 		}
 	}
-	if numbered {
-		if err := assignMatchNumbers(updated); err != nil {
-			return nil, err
-		}
+	if err := rebuildManualDay(updated, match.Day, numbered); err != nil {
+		return nil, err
 	}
 	now := time.Now().UTC()
 	schedulingRecordMovement(&updated.Matches[index], match, sourceLabel, now)
@@ -521,6 +519,36 @@ func (s *tournamentService) schedulingMoveLoadedMatch(
 		return nil, err
 	}
 	return schedulingCopyMatch(&updated.Matches[index]), nil
+}
+
+// Rebuild only the edited day; saved results, times and numbers on other days
+// must remain byte-for-byte unchanged.
+func rebuildManualDay(t *Tournament, day int, number bool) error {
+	subset := *t
+	subset.Matches = nil
+	indices := []int{}
+	settings := settingsFor(t)
+	for i, m := range t.Matches {
+		if m.Day == day {
+			subset.Matches = append(subset.Matches, m)
+			indices = append(indices, i)
+		} else if settings.Numbering.Scope == "tournament" && m.MatchNumber != nil && *m.MatchNumber >= settings.Numbering.StartAt {
+			settings.Numbering.StartAt = *m.MatchNumber + 1
+		}
+	}
+	subset.Settings = &settings
+	if err := buildScheduleTimeline(&subset, true); err != nil {
+		return err
+	}
+	if number {
+		if err := assignMatchNumbers(&subset); err != nil {
+			return err
+		}
+	}
+	for j, i := range indices {
+		t.Matches[i] = subset.Matches[j]
+	}
+	return nil
 }
 
 func schedulingValidateTargetCourt(

@@ -294,6 +294,21 @@ func TestDelayedSecondDayWeighInDrawAndNumberingPreservesDayOne(t *testing.T) {
 		t.Fatal("day two numbering must remain available after day one starts:", err)
 	}
 	dayOneAfter := []Match{}
+	dayTwoOpeners := []Match{}
+	for _, match := range r.value.Matches {
+		if match.Day == 2 && !lifecycleIsBye(&match) && match.Athlete1ID != nil && match.Athlete2ID != nil {
+			dayTwoOpeners = append(dayTwoOpeners, match)
+		}
+	}
+	if len(dayTwoOpeners) != 2 {
+		t.Fatal("expected two day-two openers")
+	}
+	if _, err := s.SwapMatchPositions(ctx, id, dayTwoOpeners[0].ID, SwapMatchPositionsInput{OtherMatchID: dayTwoOpeners[1].ID}); err != nil {
+		t.Fatal("day-two manual swap blocked by day one:", err)
+	}
+	if _, err := s.MoveMatch(ctx, id, dayTwoOpeners[0].ID, MoveMatchInput{Court: dayTwoOpeners[1].Court, Order: 1}); err != nil {
+		t.Fatal("day-two manual move blocked by day one:", err)
+	}
 	dayTwoNumbered := false
 	dayOneMaximum := 0
 	dayTwoMinimum := int(^uint(0) >> 1)
