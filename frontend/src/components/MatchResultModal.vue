@@ -18,7 +18,7 @@
       <div class="flex items-center gap-3 border-b border-slate-200 bg-white px-3 py-2 sm:px-4">
         <div class="grid h-8 w-8 place-items-center rounded-lg border border-blue-200 bg-blue-50 text-lg text-blue-700">✦</div>
         <div class="min-w-0">
-          <div class="text-sm font-black text-slate-900">برگه ثبت امتیازات</div>
+          <div class="text-sm font-black text-slate-900">برگه ثبت امتیازات <b dir="ltr" class="inline-block rounded bg-blue-700 px-2 py-1 text-xl text-white">{{ String.fromCharCode(64 + match.court) }}{{ match.matchNumber && match.matchNumber > 0 ? match.matchNumber : '—' }}</b></div>
           <div class="text-[11px] text-slate-500">{{ store.currentTournament?.name || 'مسابقات تکواندو' }}</div>
         </div>
         <span class="rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-bold text-slate-600">{{ roundLabel }}</span>

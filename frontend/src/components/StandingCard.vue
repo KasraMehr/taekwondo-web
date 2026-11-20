@@ -14,7 +14,7 @@ function displayOrder(match: Match) {
 
 function displayCourt(value: number | string | null | undefined) {
   const num = Number(value)
-  return Number.isFinite(num) && num > 0 ? num : 'نامشخص'
+  return Number.isFinite(num) && num > 0 ? String.fromCharCode(64 + num) : '—'
 }
 
 const store = useTournamentStore()
@@ -122,8 +122,8 @@ const matchSummary = computed(() => {
 
 <template>
   <div class="flex flex-col items-center gap-0.5">
-    <div class="text-[8px] font-bold text-white bg-blue-600 rounded-md px-1.5 py-px self-start mr-1">
-      بازی {{ displayOrder(match) }}
+    <div dir="ltr" class="text-sm font-black text-white bg-blue-700 rounded-md px-2 py-1 self-start mr-1">
+      {{ match.isBye ? 'استراحت' : `${displayCourt(match.court)}${match.matchNumber && match.matchNumber > 0 ? match.matchNumber : '—'}` }}
     </div>
 
     <div class="w-[120px] border border-slate-200 rounded-md overflow-hidden bg-white shadow-sm relative"
