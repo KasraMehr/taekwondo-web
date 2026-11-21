@@ -1,6 +1,7 @@
 package server
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"reflect"
@@ -14,6 +15,10 @@ import (
 
 func TestPostgresLeagueFourAthletesThroughFinal(t *testing.T) {
 	pool := testutil.Database(t)
+	var today string
+	if err := pool.QueryRow(context.Background(), `SELECT ((now() AT TIME ZONE 'Asia/Tehran')::date)::text`).Scan(&today); err != nil {
+		t.Fatal(err)
+	}
 	router := NewRouter(pool)
 	token, org := setupAccount(t, router, pool, "medals@example.test")
 	base := "/api/v1/organizations/" + org
@@ -30,7 +35,7 @@ func TestPostgresLeagueFourAthletesThroughFinal(t *testing.T) {
 		}
 		requestJSON(t, router, http.MethodPost, lp+"/athletes", token, map[string]any{"name": fmt.Sprintf("Player %d", i), "gender": "male", "clubId": club["id"], "teamId": teamID, "groupId": league.Groups[0].ID, "weightCategory": "-54", "ranking": 5 - i}, 200)
 	}
-	event := decode[tournaments.Tournament](t, requestJSON(t, router, http.MethodPost, lp+"/tournaments", token, map[string]any{"name": "Four-player test", "date": "2026-11-17", "courts": 1, "stageId": league.Stages[0].ID, "weekId": league.Stages[0].Weeks[0].ID, "groupId": league.Groups[0].ID}, 200))
+	event := decode[tournaments.Tournament](t, requestJSON(t, router, http.MethodPost, lp+"/tournaments", token, map[string]any{"name": "Four-player test", "date": today, "courts": 1, "stageId": league.Stages[0].ID, "weekId": league.Stages[0].Weeks[0].ID, "groupId": league.Groups[0].ID}, 200))
 	path := base + "/tournaments/" + event.ID
 	nextWeek := decode[tournaments.Tournament](t, requestJSON(t, router, http.MethodPost, lp+"/tournaments", token, map[string]any{"name": "Next week", "date": "2026-11-24", "courts": 1, "stageId": league.Stages[0].ID, "weekId": league.Stages[0].Weeks[1].ID, "groupId": league.Groups[0].ID}, 200))
 	for _, a := range event.Athletes {
@@ -209,6 +214,57 @@ func TestPostgresLeagueFourAthletesThroughFinal(t *testing.T) {
 	}
 	if after.Players[0].TotalPoints != 15 || after.Players[1].TotalPoints != 9 || after.Players[2].TotalPoints != 4 || after.Players[3].TotalPoints != 4 {
 		t.Fatalf("unexpected final standings: %+v", after.Players)
+	}
+	for _, tc := range []struct {
+		name                         string
+		medals                       []string
+		points, gold, silver, bronze int
+	}{
+		{"gold and silver", []string{"gold", "silver"}, 20, 1, 0, 0},
+		{"silver and bronze", []string{"silver", "bronze"}, 16, 0, 1, 0},
+		{"two bronzes", []string{"bronze"}, 13, 0, 0, 1},
+		{"gold and bronze", []string{"gold", "bronze"}, 20, 1, 0, 0},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			ctx := context.Background()
+			tx, err := pool.Begin(ctx)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer tx.Rollback(ctx)
+			// Put the fixture athletes on one team; each subtest rolls back.
+			if _, err = tx.Exec(ctx, `UPDATE league_point_events SET team_id=$2,club_name='Shared team' WHERE tournament_id=$1`, event.ID, league.Teams[0].ID); err != nil {
+				t.Fatal(err)
+			}
+			if _, err = tx.Exec(ctx, `DELETE FROM league_point_events WHERE tournament_id=$1 AND event_type IN ('gold','silver','bronze') AND NOT (event_type=ANY($2::text[]))`, event.ID, tc.medals); err != nil {
+				t.Fatal(err)
+			}
+			svc := leagues.NewService(tx, org, "")
+			got, err := svc.Standings(ctx, league.ID, nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(got.Teams) != 1 {
+				t.Fatalf("unexpected teams: %+v", got.Teams)
+			}
+			team := got.Teams[0]
+			if team.TotalPoints != tc.points || team.Gold != tc.gold || team.Silver != tc.silver || team.Bronze != tc.bronze || team.WeighInPoints != 4 || team.WinPoints != 6 {
+				t.Fatalf("incorrect best-medal team score: %+v", team)
+			}
+			medals := 0
+			for _, player := range got.Players {
+				medals += player.Gold + player.Silver + player.Bronze
+			}
+			wantMedals := len(tc.medals)
+			for _, medal := range tc.medals {
+				if medal == "bronze" {
+					wantMedals++
+				}
+			}
+			if medals != wantMedals {
+				t.Fatalf("individual medals changed: got %d want %d", medals, wantMedals)
+			}
+		})
 	}
 	list := decode[struct {
 		Items []struct {
