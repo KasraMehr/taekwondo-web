@@ -803,7 +803,18 @@ func (s *Service) Standings(ctx context.Context, leagueID string, stageID *strin
 		}
 	}
 	Rank(out.Players)
-	rows, err = s.db.Query(ctx, `SELECT COALESCE(team_id::text,club_name),club_name,sum(points),sum(gold),sum(silver),sum(bronze),sum(CASE WHEN event_type='weigh_in' THEN points ELSE 0 END),sum(CASE WHEN event_type='match_stats' THEN points ELSE 0 END),sum(round_diff),sum(wins_2_0),sum(wins_2_1),sum(losses_0_2),sum(losses_1_2),sum(wins),sum(losses) FROM league_point_events WHERE league_id=$1 AND team_id IS NOT NULL AND ($2::uuid IS NULL OR stage_id=$2) GROUP BY team_id,club_name`, leagueID, stageID)
+	// Keep each week's best medal per team and weight, including its points.
+	// Individual ledgers and non-medal points remain unchanged.
+	rows, err = s.db.Query(ctx, `WITH ranked_events AS (
+		SELECT *, row_number() OVER (
+			PARTITION BY tournament_id,team_id,weight_category,(event_type IN ('gold','silver','bronze'))
+			ORDER BY CASE event_type WHEN 'gold' THEN 1 WHEN 'silver' THEN 2 WHEN 'bronze' THEN 3 ELSE 4 END,event_key
+		) AS medal_rank
+		FROM league_point_events
+		WHERE league_id=$1 AND team_id IS NOT NULL AND ($2::uuid IS NULL OR stage_id=$2)
+	) SELECT team_id::text,max(club_name),sum(points),sum(gold),sum(silver),sum(bronze),sum(CASE WHEN event_type='weigh_in' THEN points ELSE 0 END),sum(CASE WHEN event_type='match_stats' THEN points ELSE 0 END),sum(round_diff),sum(wins_2_0),sum(wins_2_1),sum(losses_0_2),sum(losses_1_2),sum(wins),sum(losses)
+	FROM ranked_events WHERE event_type NOT IN ('gold','silver','bronze') OR medal_rank=1
+	GROUP BY team_id`, leagueID, stageID)
 	if err != nil {
 		return nil, err
 	}

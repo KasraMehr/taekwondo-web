@@ -60,6 +60,7 @@ func TestPostgresLeagueEditLockAndCoach(t *testing.T) {
 		t.Fatal("starting match did not lock structure")
 	}
 	requestJSON(t, router, http.MethodPut, path, token, edit, 409)
+	requestJSON(t, router, http.MethodPost, path+"/tournaments/"+tour.ID+"/publish", token, nil, 200)
 	l.Settings.Scoring.WinPoint = 7
 	l.Settings.Scoring.WeighInPoint = 5
 	requestJSON(t, router, http.MethodPut, path+"/settings", token, l.Settings, 200)
