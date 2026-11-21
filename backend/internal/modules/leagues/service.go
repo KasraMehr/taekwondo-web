@@ -91,8 +91,16 @@ func validateSettings(v Settings) error {
 }
 
 func (s *Service) UpdateSettings(ctx context.Context, id string, v Settings) (*League, error) {
-	if err := s.requireEditable(ctx, id); err != nil {
+	locked, err := s.structureLocked(ctx, id)
+	if err != nil {
 		return nil, err
+	}
+	current, err := s.Get(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	if locked && ((v.SeasonName != "" && v.SeasonName != current.Settings.SeasonName) || v.TeamsToPromote != current.Settings.TeamsToPromote || v.AutoPromote != current.Settings.AutoPromote) {
+		return nil, ErrStructureLocked
 	}
 	if v.SeasonName == "" {
 		current, err := s.Get(ctx, id)
@@ -111,6 +119,30 @@ func (s *Service) UpdateSettings(ctx context.Context, id string, v Settings) (*L
 	}
 	if tag.RowsAffected() == 0 {
 		return nil, ErrNotFound
+	}
+	// The request transaction keeps settings and published ledgers atomic.
+	rows, err := s.db.Query(ctx, `SELECT tournament_id::text FROM league_tournament_publications WHERE league_id=$1 ORDER BY tournament_id`, id)
+	if err != nil {
+		return nil, err
+	}
+	ids := []string{}
+	for rows.Next() {
+		var tournamentID string
+		if err = rows.Scan(&tournamentID); err != nil {
+			rows.Close()
+			return nil, err
+		}
+		ids = append(ids, tournamentID)
+	}
+	err = rows.Err()
+	rows.Close()
+	if err != nil {
+		return nil, err
+	}
+	for _, tournamentID := range ids {
+		if _, err = s.Publish(ctx, id, tournamentID); err != nil {
+			return nil, err
+		}
 	}
 	return s.Get(ctx, id)
 }
@@ -771,7 +803,7 @@ func (s *Service) Standings(ctx context.Context, leagueID string, stageID *strin
 		}
 	}
 	Rank(out.Players)
-	rows, err = s.db.Query(ctx, `SELECT COALESCE(team_id::text,club_name),club_name,sum(points),sum(gold),sum(silver),sum(bronze),sum(CASE WHEN event_type='weigh_in' THEN points ELSE 0 END),sum(CASE WHEN event_type='match_stats' THEN points ELSE 0 END),sum(round_diff),sum(wins_2_0),sum(wins_2_1),sum(losses_0_2),sum(losses_1_2),sum(wins),sum(losses) FROM league_point_events WHERE league_id=$1 AND ($2::uuid IS NULL OR stage_id=$2) GROUP BY team_id,club_name`, leagueID, stageID)
+	rows, err = s.db.Query(ctx, `SELECT COALESCE(team_id::text,club_name),club_name,sum(points),sum(gold),sum(silver),sum(bronze),sum(CASE WHEN event_type='weigh_in' THEN points ELSE 0 END),sum(CASE WHEN event_type='match_stats' THEN points ELSE 0 END),sum(round_diff),sum(wins_2_0),sum(wins_2_1),sum(losses_0_2),sum(losses_1_2),sum(wins),sum(losses) FROM league_point_events WHERE league_id=$1 AND team_id IS NOT NULL AND ($2::uuid IS NULL OR stage_id=$2) GROUP BY team_id,club_name`, leagueID, stageID)
 	if err != nil {
 		return nil, err
 	}

@@ -8,6 +8,29 @@ import (
 
 func ptr[T any](v T) *T { return &v }
 
+func TestByeAwardsOnePointWithoutPlayedWin(t *testing.T) {
+	for _, countWin := range []bool{true, false} {
+		cfg := DefaultScoring()
+		cfg.CountWin = countWin
+		tournament := &tournaments.Tournament{
+			Athletes: []tournaments.TournamentAthlete{{ID: "free", Name: "Free"}},
+			Matches: []tournaments.Match{
+				{ID: "bye", IsBye: ptr(true), WinnerID: ptr("free"), Status: ptr(tournaments.MatchStatusCompleted)},
+				{ID: "pending", IsBye: ptr(true), Status: ptr(tournaments.MatchStatusPending)},
+			},
+		}
+		for i := 0; i < 2; i++ {
+			events, err := ScoreTournament(tournament, cfg, nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(events) != 1 || events[0].EventKey != "bye:bye" || events[0].Points != 1 || events[0].Wins != 0 || events[0].RoundDiff != 0 || events[0].TeamID != nil {
+				t.Fatalf("invalid bye score: %+v", events)
+			}
+		}
+	}
+}
+
 func TestScoreTournamentUsesBracketGraphAndProducesStableKeys(t *testing.T) {
 	status := tournaments.MatchStatusCompleted
 	blue := tournaments.CornerBlue
