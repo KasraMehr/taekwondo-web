@@ -60,7 +60,21 @@ func TestPostgresLeagueEditLockAndCoach(t *testing.T) {
 		t.Fatal("starting match did not lock structure")
 	}
 	requestJSON(t, router, http.MethodPut, path, token, edit, 409)
-	requestJSON(t, router, http.MethodPut, path+"/settings", token, l.Settings, 409)
+	l.Settings.Scoring.WinPoint = 7
+	l.Settings.Scoring.WeighInPoint = 5
+	requestJSON(t, router, http.MethodPut, path+"/settings", token, l.Settings, 200)
+	standings := decode[leagues.Standings](t, requestJSON(t, router, http.MethodGet, path+"/standings", token, nil, 200))
+	if len(standings.Teams) != 1 || standings.Teams[0].ID != team.ID || len(standings.Players) != 2 {
+		t.Fatalf("free athlete must remain individual, not a team: %+v", standings)
+	}
+	for _, player := range standings.Players {
+		if player.WeighInPoints != 5 {
+			t.Fatalf("published score was not recalculated: %+v", player)
+		}
+	}
+	lockedSettings := l.Settings
+	lockedSettings.TeamsToPromote++
+	requestJSON(t, router, http.MethodPut, path+"/settings", token, lockedSettings, 409)
 	requestJSON(t, router, http.MethodPost, path+"/groups", token, map[string]any{"name": "C"}, 409)
 	requestJSON(t, router, http.MethodPut, path+"/groups/"+group, token, map[string]any{"name": "C"}, 409)
 	requestJSON(t, router, http.MethodDelete, path+"/groups/"+group, token, nil, 409)

@@ -33,6 +33,14 @@ func ScoreTournament(t *tournaments.Tournament, cfg ScoringConfig, teams map[str
 	byCategory := map[string][]tournaments.Match{}
 	for _, m := range t.Matches {
 		if m.IsBye != nil && *m.IsBye {
+			if m.Status != nil && *m.Status == tournaments.MatchStatusCompleted && m.WinnerID != nil {
+				athlete, ok := athletes[*m.WinnerID]
+				if !ok {
+					return nil, fmt.Errorf("bye %s references an unknown athlete", m.ID)
+				}
+				// Award the bye without inventing a played win or round result.
+				add(athlete, "match_stats", "bye:"+m.ID).Points = 1
+			}
 			continue
 		}
 		byCategory[m.WeightCategory] = append(byCategory[m.WeightCategory], m)

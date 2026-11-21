@@ -48,7 +48,7 @@ async function saveScoringConfig() {
       teamsToPromote: teamsToPromote.value, autoPromote: autoPromote.value,
     })
     leagueStore.replaceFromBackend(await loadWebLeagues())
-    alert("تنظیمات امتیاز ذخیره شد");
+    alert("تنظیمات ذخیره و امتیازهای منتشرشده دوباره محاسبه شد");
   } catch (e: any) { alert(e?.message || 'ذخیره تنظیمات ناموفق بود') }
 }
 
@@ -64,10 +64,11 @@ async function promoteTeamsNow() {
 <template>
   <div class="space-y-6">
     <LeagueEdit />
-    <fieldset :disabled="currentLeague?.structureLocked" class="space-y-6">
+    <fieldset class="space-y-6">
     <!-- تنظیمات امتیاز -->
     <div class="rounded-2xl border border-slate-200 bg-white p-6">
       <h3 class="mb-4 text-lg font-bold">🎯 تنظیمات امتیازدهی</h3>
+      <p class="mb-4 text-sm leading-7 text-slate-600">امتیازها پس از شروع لیگ هم قابل ویرایش‌اند. با ذخیره، نتایج منتشرشده دوباره محاسبه می‌شوند. هر استراحت ۱ امتیاز دارد.</p>
       <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         <div>
           <label class="mb-1 block text-sm font-medium text-slate-600">امتیاز طلا 🥇</label>
