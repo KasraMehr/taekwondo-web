@@ -803,12 +803,12 @@ func (s *Service) Standings(ctx context.Context, leagueID string, stageID *strin
 		}
 	}
 	Rank(out.Players)
-	// Keep each week's best medal per team and weight, including its points.
+	// Keep each tournament's best medal per team and weight, including its points.
 	// Individual ledgers and non-medal points remain unchanged.
 	rows, err = s.db.Query(ctx, `WITH ranked_events AS (
 		SELECT *, row_number() OVER (
 			PARTITION BY tournament_id,team_id,weight_category,(event_type IN ('gold','silver','bronze'))
-			ORDER BY CASE event_type WHEN 'gold' THEN 1 WHEN 'silver' THEN 2 WHEN 'bronze' THEN 3 ELSE 4 END,event_key
+			ORDER BY CASE event_type WHEN 'gold' THEN 1 WHEN 'silver' THEN 2 WHEN 'bronze' THEN 3 ELSE 4 END,tournament_id,event_key
 		) AS medal_rank
 		FROM league_point_events
 		WHERE league_id=$1 AND team_id IS NOT NULL AND ($2::uuid IS NULL OR stage_id=$2)
