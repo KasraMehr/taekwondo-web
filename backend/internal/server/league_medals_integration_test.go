@@ -218,12 +218,14 @@ func TestPostgresLeagueFourAthletesThroughFinal(t *testing.T) {
 	for _, tc := range []struct {
 		name                         string
 		medals                       []string
+		crossWeek                    bool
 		points, gold, silver, bronze int
 	}{
-		{"gold and silver", []string{"gold", "silver"}, 20, 1, 0, 0},
-		{"silver and bronze", []string{"silver", "bronze"}, 16, 0, 1, 0},
-		{"two bronzes", []string{"bronze"}, 13, 0, 0, 1},
-		{"gold and bronze", []string{"gold", "bronze"}, 20, 1, 0, 0},
+		{"gold and silver", []string{"gold", "silver"}, false, 20, 1, 0, 0},
+		{"silver and bronze", []string{"silver", "bronze"}, false, 16, 0, 1, 0},
+		{"two bronzes", []string{"bronze"}, false, 13, 0, 0, 1},
+		{"gold and bronze", []string{"gold", "bronze"}, false, 20, 1, 0, 0},
+		{"gold and bronze across weeks", []string{"gold", "bronze"}, true, 23, 1, 0, 1},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			ctx := context.Background()
@@ -238,6 +240,11 @@ func TestPostgresLeagueFourAthletesThroughFinal(t *testing.T) {
 			}
 			if _, err = tx.Exec(ctx, `DELETE FROM league_point_events WHERE tournament_id=$1 AND event_type IN ('gold','silver','bronze') AND NOT (event_type=ANY($2::text[]))`, event.ID, tc.medals); err != nil {
 				t.Fatal(err)
+			}
+			if tc.crossWeek {
+				if _, err = tx.Exec(ctx, `UPDATE league_point_events SET tournament_id=$2 WHERE id=(SELECT id FROM league_point_events WHERE tournament_id=$1 AND event_type='bronze' ORDER BY event_key LIMIT 1)`, event.ID, nextWeek.ID); err != nil {
+					t.Fatal(err)
+				}
 			}
 			svc := leagues.NewService(tx, org, "")
 			got, err := svc.Standings(ctx, league.ID, nil)

@@ -504,8 +504,9 @@ export const useLeagueStore = defineStore("league", () => {
         }
     }
 
-    function computeTeamPoints(playerPoints: Record<string, PlayerPointsRecord>): Record<string, TeamPointsRecord> {
+    function computeTeamPoints(playerPoints: Record<string, PlayerPointsRecord>, config: ScoringConfig): Record<string, TeamPointsRecord> {
         const teams: Record<string, TeamPointsRecord> = {}
+		const bestMedals = new Map<string, { rank: number; points: number }>()
 
         for (const record of Object.values(playerPoints)) {
             if (!teams[record.club]) {
@@ -529,10 +530,10 @@ export const useLeagueStore = defineStore("league", () => {
             }
 
             const team = teams[record.club]
-            team.totalPoints += record.totalPoints
-            team.gold += record.gold
-            team.silver += record.silver
-            team.bronze += record.bronze
+            team.totalPoints += record.totalPoints - record.gold * config.gold - record.silver * config.silver - record.bronze * config.bronze
+            const medal = record.gold ? { rank: 3, points: config.gold } : record.silver ? { rank: 2, points: config.silver } : record.bronze ? { rank: 1, points: config.bronze } : null
+            const medalKey = `${record.club}\u0000${record.weightCategory}`
+            if (medal && (!bestMedals.has(medalKey) || bestMedals.get(medalKey)!.rank < medal.rank)) bestMedals.set(medalKey, medal)
             team.weighInPoints += record.weighInPoints
             team.winPoints += record.winPoints
             team.roundDiff += record.roundDiff
@@ -545,6 +546,14 @@ export const useLeagueStore = defineStore("league", () => {
             team.athleteCount++
         }
 
+        for (const [key, medal] of bestMedals) {
+            const club = key.split('\u0000')[0]
+            const team = teams[club]
+            team.totalPoints += medal.points
+            if (medal.rank === 3) team.gold++
+            else if (medal.rank === 2) team.silver++
+            else team.bronze++
+        }
         return teams
     }
 
@@ -593,19 +602,24 @@ export const useLeagueStore = defineStore("league", () => {
             const tournament = tournamentStore.tournaments.find((t) => t.id === week.tournamentId)
             if (!tournament) continue
 
-            applyWeighInToStage(stage, league, tournament)
+            const weekStage: Stage = { ...stage, playerPoints: {}, teamPoints: {} }
+            applyWeighInToStage(weekStage, league, tournament)
 
             // اول امتیاز هر بازی
             for (const match of tournament.matches) {
-                applyMatchToStage(stage, league, tournament, match)
+                applyMatchToStage(weekStage, league, tournament, match)
             }
 
             // بعد مدال‌ها (بعد از همه بازی‌ها)
-            awardMedals(stage, league, tournament)
+            awardMedals(weekStage, league, tournament)
+			for (const [key, record] of Object.entries(weekStage.playerPoints)) stage.playerPoints[key] = mergeRecords(stage.playerPoints[key], record)
+			for (const [key, record] of Object.entries(computeTeamPoints(weekStage.playerPoints, league.season.scoringConfig))) stage.teamPoints[key] = mergeRecords(stage.teamPoints[key], record)
         }
 
-        // محاسبه امتیاز تیمی از امتیاز بازیکنان
-        stage.teamPoints = computeTeamPoints(stage.playerPoints)
+        // امتیاز تیمی هر هفته جداگانه محاسبه و سپس جمع شده است.
+        const athleteCounts = new Map<string, number>()
+        for (const record of Object.values(stage.playerPoints)) athleteCounts.set(record.club, (athleteCounts.get(record.club) ?? 0) + 1)
+        for (const team of Object.values(stage.teamPoints)) team.athleteCount = athleteCounts.get(team.club) ?? 0
 
         // به‌روزرسانی امتیاز فصل
         recalculateSeasonPoints(league)
