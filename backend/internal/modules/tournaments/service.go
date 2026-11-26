@@ -235,6 +235,7 @@ type TournamentService interface {
 		matchID string,
 		input SwapAthletesInput,
 	) (*Tournament, error)
+	PlaceAthlete(context.Context, string, string, PlaceAthleteInput) (*Tournament, error)
 
 	ResetRankings(
 		ctx context.Context,
@@ -356,6 +357,11 @@ type SwapAthletesInput struct {
 	Slot         int    `json:"slot"`
 	OtherMatchID string `json:"otherMatchId"`
 	OtherSlot    int    `json:"otherSlot"`
+}
+
+type PlaceAthleteInput struct {
+	Slot      int    `json:"slot"`
+	AthleteID string `json:"athleteId"`
 }
 
 func (s *tournamentService) Create(
@@ -1141,11 +1147,19 @@ func (s *tournamentService) UpdateAthlete(
 		}
 	}
 
-	if current.WeightCategory != weightCategory && bracketExistsForCategory(tournament.Matches, weightCategory) {
-		return nil, ErrAthleteLocked
-	}
 	changingWeight := current.WeightCategory != weightCategory
 	failedWeighInCorrection := changingWeight && current.WeighIn != nil && current.WeighIn.Status == WeighInFailed
+	if changingWeight && bracketExistsForCategory(tournament.Matches, weightCategory) && !failedWeighInCorrection {
+		return nil, ErrAthleteLocked
+	}
+	if changingWeight && bracketExistsForCategory(tournament.Matches, weightCategory) {
+		for _, match := range tournament.Matches {
+			if match.WeightCategory == weightCategory && !lifecycleIsBye(&match) &&
+				(lifecycleHasResult(&match) || lifecycleMatchStatus(&match) != MatchStatusPending) {
+				return nil, fmt.Errorf("%w: destination category has started", ErrAthleteLocked)
+			}
+		}
+	}
 	if changingWeight && !failedWeighInCorrection &&
 		current.WeighIn != nil &&
 		(current.WeighIn.Status != WeighInPending ||

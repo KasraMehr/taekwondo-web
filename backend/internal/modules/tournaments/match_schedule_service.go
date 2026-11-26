@@ -696,6 +696,92 @@ func schedulingCopyMatch(match *Match) *Match {
 	return &result
 }
 
+// PlaceAthlete adds an approved outsider to an empty bye slot or substitutes
+// an occupied first-round slot without redrawing any other match.
+func (s *tournamentService) PlaceAthlete(ctx context.Context, tournamentID, matchID string, input PlaceAthleteInput) (*Tournament, error) {
+	if err := lifecycleValidateMatchID(matchID); err != nil {
+		return nil, err
+	}
+	if err := lifecycleValidateMatchID(input.AthleteID); err != nil {
+		return nil, err
+	}
+	if input.Slot != 1 && input.Slot != 2 {
+		return nil, fmt.Errorf("%w: slot must be 1 or 2", ErrInvalidTournamentInput)
+	}
+	tournament, err := s.GetByID(ctx, tournamentID)
+	if err != nil {
+		return nil, err
+	}
+	index, err := lifecycleFindMatchIndex(tournament.Matches, matchID)
+	if err != nil {
+		return nil, err
+	}
+	match := &tournament.Matches[index]
+	if match.Round != 1 {
+		return nil, fmt.Errorf("%w: select a first-round slot", ErrInvalidTournamentInput)
+	}
+	athleteIndex := findTournamentAthleteIndex(tournament.Athletes, input.AthleteID)
+	if athleteIndex < 0 {
+		return nil, ErrAthleteNotFound
+	}
+	athlete := tournament.Athletes[athleteIndex]
+	if athlete.WeightCategory != match.WeightCategory || !athletePassedWeighIn(athlete) {
+		return nil, fmt.Errorf("%w: athlete must pass weigh-in in the same category", ErrWeighInNotPassed)
+	}
+	if athleteIsReferencedByMatches(tournament.Matches, athlete.ID) {
+		return nil, fmt.Errorf("%w: athlete is already in the draw", ErrDuplicateAthlete)
+	}
+	for i := range tournament.Matches {
+		m := &tournament.Matches[i]
+		if m.WeightCategory == match.WeightCategory && !lifecycleIsBye(m) &&
+			(lifecycleHasResult(m) || lifecycleMatchStatus(m) != MatchStatusPending) {
+			return nil, fmt.Errorf("%w: category has started or contains results", ErrMatchLocked)
+		}
+	}
+	updated := schedulingCloneMatches(tournament)
+	target := &updated.Matches[index]
+	slot := athleteSwapSlot(target, input.Slot)
+	if slot == nil {
+		return nil, ErrInvalidTournamentInput
+	}
+	if *slot == nil {
+		if !lifecycleIsBye(target) {
+			return nil, fmt.Errorf("%w: empty slot is not a bye", ErrInvalidTournamentInput)
+		}
+		if target.NextMatchID != nil {
+			nextIndex, nextErr := lifecycleFindMatchIndex(updated.Matches, *target.NextMatchID)
+			if nextErr != nil {
+				return nil, nextErr
+			}
+			next := &updated.Matches[nextIndex]
+			if target.NextSlot != nil && *target.NextSlot == NextSlotAthlete2 {
+				next.Athlete2ID = nil
+			} else {
+				next.Athlete1ID = nil
+			}
+		}
+		isBye := false
+		target.IsBye = &isBye
+		target.WinnerID = nil
+		lifecycleSetStatus(target, MatchStatusPending)
+		target.Court = 1
+		target.Order = calculateNextOrderByCourt(updated.Matches, updated.Courts)[1]
+		target.MatchNumber = nil
+	}
+	*slot = stringPointer(athlete.ID)
+	if lifecycleIsBye(target) {
+		refreshSwappedBye(updated, target)
+	}
+	updated.UpdatedAt = time.Now().UTC()
+	if err := lifecycleValidateBracket(updated); err != nil {
+		return nil, fmt.Errorf("validate bracket after placement: %w", err)
+	}
+	if err := s.repository.Update(ctx, updated); err != nil {
+		return nil, err
+	}
+	return updated, nil
+}
+
 // SwapAthletes exchanges two first-round athlete slots while preserving the
 // bracket positions. Auto-completed bye winners are allowed and their
 // propagated participant in the next round is refreshed after the swap.

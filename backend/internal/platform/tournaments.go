@@ -347,6 +347,9 @@ func (a *API) tournamentRoutes(org *gin.RouterGroup) {
 	group.POST("/:tournament/matches/:match/swap-athlete", tournamentBody(a, permTournamentsManage, func(r *Request, in tournaments.SwapAthletesInput) (any, error) {
 		return r.Service().SwapAthletes(r.Context(), r.C.Param("tournament"), r.C.Param("match"), in)
 	}))
+	group.POST("/:tournament/matches/:match/place-athlete", tournamentBody(a, permTournamentsManage, func(r *Request, in tournaments.PlaceAthleteInput) (any, error) {
+		return r.Service().PlaceAthlete(r.Context(), r.C.Param("tournament"), r.C.Param("match"), in)
+	}))
 	group.POST("/:tournament/rankings/reset", tournamentBody(a, permTournamentsManage, func(r *Request, in struct {
 		WeightCategory string `json:"weightCategory"`
 	}) (any, error) {
