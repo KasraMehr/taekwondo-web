@@ -101,6 +101,11 @@
       </div>
     </transition>
 
+    <section v-if="outsideDraw.length && hasMatches && !ceremonyMode" class="mx-auto mb-6 max-w-6xl rounded-2xl border border-blue-200 bg-white p-4 shadow-sm sm:p-5">
+      <div class="mb-3 flex flex-wrap items-center justify-between gap-2"><div><h2 class="font-black text-slate-900">بازیکنان خارج از قرعه</h2><p class="mt-1 text-xs leading-5 text-slate-600">بازیکنِ تأییدوزن‌شده را انتخاب کنید؛ سپس روی جای خالیِ استراحت یا بازیکن موردنظر در دور اول همان وزن بزنید. سایر بازی‌ها و نتایج تغییر نمی‌کنند.</p></div><button v-if="selectedOutsideId" class="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-bold text-slate-600" @click="selectedOutsideId=null; swapMode=false">لغو انتخاب</button></div>
+      <div class="flex flex-wrap gap-2"><button v-for="athlete in outsideDraw" :key="athlete.id" type="button" :disabled="athlete.weighIn?.status !== 'passed' || placingOutside" class="rounded-xl border px-3 py-2 text-right text-sm transition disabled:cursor-not-allowed disabled:opacity-55" :class="selectedOutsideId===athlete.id?'border-blue-600 bg-blue-50 text-blue-900':'border-slate-200 bg-slate-50 text-slate-700 hover:border-blue-300'" @click="selectOutside(athlete)"><span class="font-bold">{{ athlete.name }}</span><span class="mr-2 text-xs">{{ athlete.weightCategory }} · {{ athlete.weighIn?.status === 'passed' ? 'آمادهٔ جایگزینی' : 'در انتظار تأیید وزن' }}</span></button></div>
+    </section>
+
     <transition name="fade">
       <div v-if="sectionsWithoutRanking.length"
            class="max-w-3xl mx-auto mb-6 rounded-2xl border border-rose-200 bg-rose-50 px-5 py-3.5 text-sm text-rose-800 shadow-sm">
@@ -245,7 +250,7 @@
                        :style="columnHeightStyle(section.key)">
                     <div class="bracket-slot" v-for="m in matchesBySideRound(section.key, 'left', round)" :key="m.id">
                       <div class="match-wrap">
-                        <MatchCard :match="m" :swap-mode="swapMode" :selected-slot="selectedSlot" @select-slot="onSelectSlot" />
+                        <MatchCard :match="m" :swap-mode="swapMode" :allow-empty-placement="!!selectedOutsideId" :selected-slot="selectedSlot" @select-slot="onSelectSlot" />
                       </div>
                     </div>
                   </div>
@@ -260,7 +265,7 @@
                   <div class="w-full shrink-0 rounded-2xl border border-amber-100 bg-gradient-to-b from-amber-50 to-orange-50/50 p-2">
                     <div class="flex flex-col gap-2">
                       <MatchCard v-for="m in finalMatches(section.key)" :key="m.id" :match="m"
-                                 :swap-mode="swapMode && finalRound(section.key) === 1"
+                                 :swap-mode="swapMode && finalRound(section.key) === 1" :allow-empty-placement="!!selectedOutsideId"
                                  :selected-slot="selectedSlot" @select-slot="onSelectSlot" />
                     </div>
                   </div>
@@ -276,7 +281,7 @@
                        :style="columnHeightStyle(section.key)">
                     <div class="bracket-slot" v-for="m in matchesBySideRound(section.key, 'right', round)" :key="m.id">
                       <div class="match-wrap">
-                        <MatchCard :match="m" :swap-mode="swapMode" :selected-slot="selectedSlot" @select-slot="onSelectSlot" />
+                        <MatchCard :match="m" :swap-mode="swapMode" :allow-empty-placement="!!selectedOutsideId" :selected-slot="selectedSlot" @select-slot="onSelectSlot" />
                       </div>
                     </div>
                   </div>
@@ -358,7 +363,7 @@
                          :style="columnHeightStyle(focusedSection.key)">
                       <div class="bracket-slot" v-for="m in matchesBySideRound(focusedSection.key, 'left', round)" :key="m.id">
                         <div class="match-wrap">
-                          <MatchCard :match="m" :swap-mode="swapMode" :selected-slot="selectedSlot" @select-slot="onSelectSlot" />
+                          <MatchCard :match="m" :swap-mode="swapMode" :allow-empty-placement="!!selectedOutsideId" :selected-slot="selectedSlot" @select-slot="onSelectSlot" />
                         </div>
                       </div>
                     </div>
@@ -372,7 +377,7 @@
                     <div class="w-full shrink-0 rounded-2xl border border-amber-100 bg-gradient-to-b from-amber-50 to-orange-50/50 p-2">
                       <div class="flex flex-col gap-2">
                         <MatchCard v-for="m in finalMatches(focusedSection.key)" :key="m.id" :match="m"
-                                   :swap-mode="swapMode && finalRound(focusedSection.key) === 1"
+                                   :swap-mode="swapMode && finalRound(focusedSection.key) === 1" :allow-empty-placement="!!selectedOutsideId"
                                    :selected-slot="selectedSlot" @select-slot="onSelectSlot" />
                       </div>
                     </div>
@@ -388,7 +393,7 @@
                          :style="columnHeightStyle(focusedSection.key)">
                       <div class="bracket-slot" v-for="m in matchesBySideRound(focusedSection.key, 'right', round)" :key="m.id">
                         <div class="match-wrap">
-                          <MatchCard :match="m" :swap-mode="swapMode" :selected-slot="selectedSlot" @select-slot="onSelectSlot" />
+                          <MatchCard :match="m" :swap-mode="swapMode" :allow-empty-placement="!!selectedOutsideId" :selected-slot="selectedSlot" @select-slot="onSelectSlot" />
                         </div>
                       </div>
                     </div>
@@ -552,6 +557,8 @@ const officialMap = computed(() => {
 
 const swapMode = ref(false)
 const selectedSlot = ref<{ matchId: string; slot: 1 | 2 } | null>(null)
+const selectedOutsideId = ref<string | null>(null)
+const placingOutside = ref(false)
 const selectedCategory = ref<string | null>(null)   // با normCat ذخیره می‌شود
 const drawType = ref<'random' | 'ranked'>('random')
 const isDrawing = ref(false)
@@ -578,6 +585,19 @@ const eligibleAthletes = computed(() =>
 )
 const allMatches = computed<any[]>(() => store.currentTournament?.matches ?? [])
 const hasMatches = computed(() => allMatches.value.length > 0)
+const outsideDraw = computed(() => {
+  const drawn = new Set(allMatches.value.map((match) => normCat(match.weightCategory)))
+  const placed = new Set(allMatches.value.flatMap((match) => [match.athlete1Id, match.athlete2Id]).filter(Boolean))
+  return athletesAll.value.filter((athlete) => drawn.has(normCat(athlete.weightCategory)) && !placed.has(athlete.id))
+})
+
+function selectOutside(athlete: any) {
+  selectedOutsideId.value = athlete.id
+  selectedCategory.value = normCat(athlete.weightCategory)
+  selectedSlot.value = null
+  swapMode.value = true
+  showToast('حالا بازیکن دور اول را برای جایگزینی انتخاب کنید.')
+}
 
 function nextPow2(n: number) { let p = 1; while (p < n) p <<= 1; return p }
 
@@ -926,9 +946,31 @@ function ceremonyNext() { if (ceremonyIndex.value < weightSections.value.length 
 
 /* ==================== جابه‌جایی ==================== */
 
-function toggleSwapMode() { swapMode.value = !swapMode.value; selectedSlot.value = null }
+function toggleSwapMode() { swapMode.value = !swapMode.value; selectedSlot.value = null; selectedOutsideId.value = null }
 
-function onSelectSlot(payload: { matchId: string; slot: 1 | 2 }) {
+async function onSelectSlot(payload: { matchId: string; slot: 1 | 2 }) {
+  if (selectedOutsideId.value) {
+    const match = allMatches.value.find(m => m.id === payload.matchId)
+    const athlete = athletesAll.value.find(a => a.id === selectedOutsideId.value)
+    const replacedId = payload.slot === 1 ? match?.athlete1Id : match?.athlete2Id
+    if (!match || !athlete || normCat(match.weightCategory) !== normCat(athlete.weightCategory) || match.round !== 1 || (!replacedId && !match.isBye)) {
+      showToast('یک جایگاه دور اول از همان وزن را انتخاب کنید.', 'warning'); return
+    }
+    if (!confirm(replacedId ? `«${athlete.name}» جایگزین بازیکن انتخاب‌شده می‌شود و بازیکن قبلی خارج از قرعه می‌ماند. ادامه می‌دهید؟` : `«${athlete.name}» در جای خالی استراحت قرار می‌گیرد و این بازی باید شماره‌گذاری شود. ادامه می‌دهید؟`)) return
+    const tournamentId = store.currentTournamentId
+    if (!tournamentId || placingOutside.value) return
+    placingOutside.value = true
+    try {
+      await webApi().call(`/tournaments/${tournamentId}/matches/${match.id}/place-athlete`, 'POST', { slot: payload.slot, athleteId: athlete.id })
+      await store.refreshFromServer(tournamentId)
+      selectedOutsideId.value = null
+      swapMode.value = false
+      showToast('بازیکن بدون بازسازی قرعه وارد جایگاه انتخاب‌شده شد.')
+    } catch (error: any) {
+      showToast(error?.message || 'جایگزینی بازیکن انجام نشد.', 'warning')
+    } finally { placingOutside.value = false }
+    return
+  }
   if (!selectedSlot.value) { selectedSlot.value = payload; return }
   if (selectedSlot.value.matchId === payload.matchId && selectedSlot.value.slot === payload.slot) {
     selectedSlot.value = null; return
