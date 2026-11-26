@@ -425,6 +425,169 @@ func TestFailedWeighInCanMoveToUndrawnWeightWithoutChangingExistingBracket(t *te
 		t.Fatal("new category weigh-in did not restart")
 	}
 }
+
+func TestFailedWeighInStaysOutsideDrawUntilManualPlacement(t *testing.T) {
+	s, r, id := newFixture(t)
+	enter(t, s, id, "-54", 3)
+	failed := r.value.Athletes[0]
+	r.value.Athletes[0].WeighIn.Status = WeighInFailed
+	r.value.Athletes[0].WeighedIn = false
+	enter(t, s, id, "-58", 3)
+	if _, err := s.DrawBracket(context.Background(), id, "ranking"); err != nil {
+		t.Fatal(err)
+	}
+	if !bracketExistsForCategory(r.value.Matches, "-58") {
+		t.Fatal("destination draw missing")
+	}
+	if _, err := s.UpdateAthlete(context.Background(), id, failed.ID, UpdateAthleteInput{Name: failed.Name, Club: failed.Club, WeightCategory: "-58"}); err != nil {
+		t.Fatal(err)
+	}
+	if athleteIsReferencedByMatches(r.value.Matches, failed.ID) {
+		t.Fatal("athlete entered draw before new weigh-in")
+	}
+	if _, err := s.RecordWeighIn(context.Background(), id, failed.ID, RecordWeighInInput{WeightKg: 56}); err != nil {
+		t.Fatal(err)
+	}
+	if athleteIsReferencedByMatches(r.value.Matches, failed.ID) {
+		t.Fatal("weigh-in changed the draw automatically")
+	}
+	var target Match
+	for _, m := range r.value.Matches {
+		if m.WeightCategory == "-58" && m.Round == 1 && m.Athlete1ID != nil {
+			target = m
+			break
+		}
+	}
+	if target.ID == "" {
+		t.Fatal("no replaceable first-round slot")
+	}
+	old := *target.Athlete1ID
+	if _, err := s.PlaceAthlete(context.Background(), id, target.ID, PlaceAthleteInput{Slot: 1, AthleteID: failed.ID}); err != nil {
+		t.Fatal(err)
+	}
+	if !athleteIsReferencedByMatches(r.value.Matches, failed.ID) || athleteIsReferencedByMatches(r.value.Matches, old) {
+		t.Fatal("manual replacement did not update the selected slot")
+	}
+	if len(r.value.Athletes[0].WeighInCorrections) != 1 {
+		t.Fatal("original failed weigh-in was not preserved")
+	}
+}
+
+func TestOutsideAthleteFillsExistingByeWithoutRedraw(t *testing.T) {
+	s, r, id := newFixture(t)
+	enter(t, s, id, "-54", 3)
+	failed := r.value.Athletes[0]
+	r.value.Athletes[0].WeighIn.Status = WeighInFailed
+	r.value.Athletes[0].WeighedIn = false
+	enter(t, s, id, "-58", 3)
+	if _, err := s.DrawBracket(context.Background(), id, "ranking"); err != nil {
+		t.Fatal(err)
+	}
+	beforeIDs := map[string]bool{}
+	var bye Match
+	for _, m := range r.value.Matches {
+		beforeIDs[m.ID] = true
+		if m.WeightCategory == "-58" && m.Round == 1 && lifecycleIsBye(&m) {
+			bye = m
+		}
+	}
+	if bye.ID == "" {
+		t.Fatal("expected bye")
+	}
+	if _, err := s.UpdateAthlete(context.Background(), id, failed.ID, UpdateAthleteInput{Name: failed.Name, Club: failed.Club, WeightCategory: "-58"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.RecordWeighIn(context.Background(), id, failed.ID, RecordWeighInInput{WeightKg: 56}); err != nil {
+		t.Fatal(err)
+	}
+	slot := 1
+	if bye.Athlete1ID != nil {
+		slot = 2
+	}
+	if _, err := s.PlaceAthlete(context.Background(), id, bye.ID, PlaceAthleteInput{Slot: slot, AthleteID: failed.ID}); err != nil {
+		t.Fatal(err)
+	}
+	for _, m := range r.value.Matches {
+		if !beforeIDs[m.ID] {
+			t.Fatal("placement redrew a match")
+		}
+		if m.ID == bye.ID && (lifecycleIsBye(&m) || m.WinnerID != nil || m.MatchNumber != nil) {
+			t.Fatal("bye was not converted to unnumbered playable match")
+		}
+	}
+	if !athleteIsReferencedByMatches(r.value.Matches, failed.ID) {
+		t.Fatal("athlete missing from former bye")
+	}
+}
+
+func TestTwoDayCorrectionKeepsCompletedFirstDayIntact(t *testing.T) {
+	s, r, id := newFixture(t)
+	settings := *r.value.Settings
+	settings.Schedule.Days = append(settings.Schedule.Days, EventDay{Day: 2, Date: "2026-10-02", Label: "روز دوم"})
+	settings.Schedule.CategoryDays = map[string]int{}
+	for _, category := range WeightOptions(AgeCategoryBozorgsalan, GenderMale) {
+		settings.Schedule.CategoryDays[category] = 1
+	}
+	settings.Schedule.CategoryDays["-58"] = 2
+	if _, err := s.UpdateSettings(context.Background(), id, settings); err != nil {
+		t.Fatal(err)
+	}
+	enter(t, s, id, "-54", 3)
+	enter(t, s, id, "-58", 3)
+	failed := r.value.Athletes[0]
+	r.value.Athletes[0].WeighIn.Status = WeighInFailed
+	r.value.Athletes[0].WeighedIn = false
+	if _, err := s.DrawBracketForCategory(context.Background(), id, "-54", "ranking"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.DrawBracketForCategory(context.Background(), id, "-58", "ranking"); err != nil {
+		t.Fatal(err)
+	}
+	for i := range r.value.Matches {
+		if r.value.Matches[i].Day == 1 && !lifecycleIsBye(&r.value.Matches[i]) {
+			status := MatchStatusCompleted
+			r.value.Matches[i].Status = &status
+			r.value.Matches[i].Result = &MatchResult{WinType: WinTypePTF, RecordedAt: time.Now().UTC()}
+		}
+	}
+	dayOneBefore := []Match{}
+	for _, match := range r.value.Matches {
+		if match.Day == 1 {
+			dayOneBefore = append(dayOneBefore, match)
+		}
+	}
+	if _, err := s.UpdateAthlete(context.Background(), id, failed.ID, UpdateAthleteInput{Name: failed.Name, Club: failed.Club, WeightCategory: "-58"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.RecordWeighIn(context.Background(), id, failed.ID, RecordWeighInInput{WeightKg: 56}); err != nil {
+		t.Fatal(err)
+	}
+	var target Match
+	for _, m := range r.value.Matches {
+		if m.Day == 2 && m.Round == 1 && m.Athlete1ID != nil {
+			target = m
+			break
+		}
+	}
+	if target.ID == "" {
+		t.Fatal("no day two slot")
+	}
+	if _, err := s.PlaceAthlete(context.Background(), id, target.ID, PlaceAthleteInput{Slot: 1, AthleteID: failed.ID}); err != nil {
+		t.Fatal(err)
+	}
+	dayOneAfter := []Match{}
+	for _, match := range r.value.Matches {
+		if match.Day == 1 {
+			dayOneAfter = append(dayOneAfter, match)
+		}
+	}
+	if !reflect.DeepEqual(dayOneBefore, dayOneAfter) {
+		t.Fatal("completed day one bracket or results changed")
+	}
+	if !athleteIsReferencedByMatches(r.value.Matches, failed.ID) {
+		t.Fatal("athlete missing from day two bracket")
+	}
+}
 func TestSettingsTwoDaysAndNumberingModes(t *testing.T) {
 	for _, mode := range []string{"single_court", "split_halves", "balanced"} {
 		t.Run(mode, func(t *testing.T) {

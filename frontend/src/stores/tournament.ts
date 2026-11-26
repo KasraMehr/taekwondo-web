@@ -232,10 +232,13 @@ export const useTournamentStore = defineStore("tournament", () => {
             return { error: 'رنک باید عدد صحیح مثبت باشد' }
         const previous = t.athletes[idx]
         const failedWeighInCorrection = previous.weightCategory !== athlete.weightCategory && previous.weighIn?.status === 'failed'
+        const destinationDrawn = t.matches.some(m => m.weightCategory === athlete.weightCategory)
+        const destinationStarted = t.matches.some(m => m.weightCategory === athlete.weightCategory && !m.isBye && (m.status === 'ongoing' || m.result != null))
         if (previous.weightCategory !== athlete.weightCategory &&
             ((!failedWeighInCorrection && ((previous.weighIn?.attempts.length ?? 0) > 0 || previous.weighIn?.status === 'passed')) ||
-             t.matches.some(m => m.athlete1Id === athlete.id || m.athlete2Id === athlete.id || m.weightCategory === athlete.weightCategory)))
-            return { error: 'این ورزشکار در جدول حضور دارد یا قرعهٔ وزن مقصد انجام شده است' }
+             t.matches.some(m => m.athlete1Id === athlete.id || m.athlete2Id === athlete.id) ||
+             (destinationDrawn && (!failedWeighInCorrection || destinationStarted))))
+            return { error: 'ورزشکار در جدول حضور دارد یا بازی‌های وزن مقصد شروع شده‌اند' }
         if (idx !== -1) {
             t.athletes[idx] = {
                 ...athlete,

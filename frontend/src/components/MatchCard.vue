@@ -43,6 +43,7 @@ import { matchSummary } from '../utils/matchSummary'
 const props = defineProps<{
   match: Match
   swapMode?: boolean
+  allowEmptyPlacement?: boolean
   selectedSlot?: { matchId: string; slot: 1 | 2 } | null
 }>()
 
@@ -102,15 +103,15 @@ function slotClass(slot: 1 | 2) {
     [blue]:  !isEmpty && slot === 1 && !neutral,
     [red]:   !isEmpty && slot === 2 && !neutral,
     'bg-emerald-100 text-emerald-950 border-r-4 border-emerald-500 font-bold': winner,
-    'cursor-pointer hover:brightness-95': canSwap.value && !isEmpty,
+    'cursor-pointer hover:brightness-95': canSwap.value && (!isEmpty || (props.allowEmptyPlacement && byeMatch.value)),
     'cursor-default': !canSwap.value,
     'ring-2 ring-inset ring-indigo-500 relative z-10': isSelected(slot),
-    'opacity-50': props.swapMode && (!canSwap.value || isEmpty),
+    'opacity-50': props.swapMode && (!canSwap.value || (isEmpty && !props.allowEmptyPlacement)),
   }
 }
 
 function onSlotClick(slot: 1 | 2) {
-  if (!canSwap.value || !athleteId(slot)) return
+  if (!canSwap.value || (!athleteId(slot) && !(props.allowEmptyPlacement && byeMatch.value))) return
   emit('select-slot', { matchId: props.match.id, slot })
 }
 
