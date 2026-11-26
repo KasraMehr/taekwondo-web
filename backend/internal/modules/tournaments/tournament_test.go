@@ -389,6 +389,42 @@ func TestDrawUsesStructuredWeighInAndLocksEntries(t *testing.T) {
 		}
 	}
 }
+
+func TestFailedWeighInCanMoveToUndrawnWeightWithoutChangingExistingBracket(t *testing.T) {
+	s, r, id := newFixture(t)
+	enter(t, s, id, "-54", 3)
+	failed := r.value.Athletes[0]
+	r.value.Athletes[0].WeighIn.Status = WeighInFailed
+	r.value.Athletes[0].WeighedIn = false
+	drawn, err := s.DrawBracket(context.Background(), id, "ranking")
+	if err != nil {
+		t.Fatal(err)
+	}
+	beforeMatches, err := json.Marshal(drawn.Matches)
+	if err != nil {
+		t.Fatal(err)
+	}
+	updated, err := s.UpdateAthlete(context.Background(), id, failed.ID, UpdateAthleteInput{Name: failed.Name, Club: failed.Club, WeightCategory: "-58"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if updated.WeightCategory != "-58" || updated.WeighIn.Status != WeighInPending || len(updated.WeighIn.Attempts) != 0 || len(updated.WeighInCorrections) != 1 || updated.WeighInCorrections[0].PreviousCategory != "-54" || updated.WeighInCorrections[0].PreviousWeighIn.Status != WeighInFailed {
+		t.Fatalf("failed weigh-in correction was not recorded: %+v", updated)
+	}
+	afterMatches, err := json.Marshal(r.value.Matches)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(beforeMatches) != string(afterMatches) {
+		t.Fatal("existing bracket changed")
+	}
+	if _, err := s.RecordWeighIn(context.Background(), id, failed.ID, RecordWeighInInput{WeightKg: 56}); err != nil {
+		t.Fatal(err)
+	}
+	if r.value.Athletes[0].WeighIn.Status != WeighInPassed {
+		t.Fatal("new category weigh-in did not restart")
+	}
+}
 func TestSettingsTwoDaysAndNumberingModes(t *testing.T) {
 	for _, mode := range []string{"single_court", "split_halves", "balanced"} {
 		t.Run(mode, func(t *testing.T) {

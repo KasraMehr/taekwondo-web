@@ -116,6 +116,9 @@
             <p v-if="form.weightCategory" class="mt-1.5 text-xs text-slate-500">
               انتخاب‌شده: <span class="font-medium text-slate-700">{{ weightLabel(form.weightCategory) }}</span>
             </p>
+            <p v-if="editing?.weighIn?.status === 'failed'" class="mt-2 rounded-lg bg-amber-50 px-3 py-2 text-xs leading-6 text-amber-800">
+              این ورزشکار در وزن‌کشی رد شده است. اگر در جدول بازی نداشته باشد و وزن جدید هنوز قرعه‌کشی نشده باشد، می‌توانید وزنش را عوض کنید؛ وزن‌کشی وزن جدید از ابتدا انجام می‌شود.
+            </p>
           </div>
 
           <div>
@@ -140,6 +143,11 @@
                 {{ c }}
               </button>
             </div>
+          </div>
+
+          <div>
+            <label class="mb-1 block text-xs font-medium text-slate-600">نام مربی</label>
+            <input v-model="form.coach" @keyup.enter="submitAndNext" placeholder="نام مربی ورزشکار" class="input w-full" />
           </div>
 
           <div>
@@ -410,7 +418,7 @@ const editing   = ref(null)
 const formError = ref('')
 const nameInput = ref(null)
 const lastAddedCount = ref(0)
-const form = ref({ name: '', club: '', weightCategory: '', ranking: null })
+const form = ref({ name: '', club: '', coach: '', weightCategory: '', ranking: null })
 
 // باشگاه‌های ثبت‌شده برای autocomplete
 const knownClubs = computed(() =>
@@ -460,7 +468,7 @@ function defaultWeight() {
 function openAdd(weight) {
   editing.value = null
   lastAddedCount.value = 0
-  form.value = { name: '', club: '', weightCategory: weight || defaultWeight(), ranking: null }
+  form.value = { name: '', club: '', coach: '', weightCategory: weight || defaultWeight(), ranking: null }
   formError.value = ''
   showForm.value = true
   focusName()
@@ -502,6 +510,7 @@ function submitAndNext() {
   form.value = {
     name: '',
     club: form.value.club,
+    coach: form.value.coach,
     weightCategory: form.value.weightCategory,
     ranking: null,
   }
@@ -514,6 +523,7 @@ function startEdit(a) {
   form.value = {
     name: a.name,
     club: a.club ?? '',
+    coach: a.coach ?? '',
     weightCategory: a.weightCategory,
     ranking: a.ranking ?? null,
   }

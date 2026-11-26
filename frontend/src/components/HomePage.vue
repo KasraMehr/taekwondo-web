@@ -329,7 +329,10 @@ interface Row {
 }
 
 const rows = computed<Row[]>(() => {
-  const individual: Row[] = store.tournaments.map((t) => ({
+  const leagueWeekTournamentIds = new Set(leagueStore.leagues.flatMap((league) =>
+    league.season.stages.flatMap((stage) => stage.weeks.map((week) => week.tournamentId).filter(Boolean)),
+  ));
+  const individual: Row[] = store.tournaments.filter((t) => !t.leagueId && !leagueWeekTournamentIds.has(t.id)).map((t) => ({
     key: `grandPrix:${t.id}`,
     id: t.id,
     format: (t.format ?? "grandPrix") as TournamentFormat,
@@ -342,7 +345,7 @@ const rows = computed<Row[]>(() => {
     count: t.athletes.length,
   }));
 
-  const teams: Row[] = teamStore.items.map((t) => ({
+  const teams: Row[] = teamStore.items.filter((t) => !t.leagueId && !leagueWeekTournamentIds.has(t.id)).map((t) => ({
     key: `team:${t.id}`,
     id: t.id,
     format: "team" as TournamentFormat,
@@ -384,7 +387,7 @@ function remove(row: Row) {
 // ─── لیگ‌ها ───
 const showLeagueForm = ref(false);
 const leagueDiscipline = ref<'kyorugi' | 'poomsae'>('kyorugi');
-type PoomsaeLeagueSummary = { id: string; name: string; seasonName: string; weeks: { id: string; eventId: string | null; stage: number }[] };
+type PoomsaeLeagueSummary = { id: string; name: string; seasonName: string; weeks: { id: string; name?: string; position?: number; eventId: string | null; stage: number }[] };
 const poomsaeLeagues = ref<PoomsaeLeagueSummary[]>([]);
 const leagueFilter = ref<'all' | 'kyorugi' | 'poomsae'>('all');
 const poomsaeLeagueError = ref('');
@@ -471,12 +474,38 @@ function openLeague(id: string) {
   ui.goLeagueDetail();
 }
 
+function openLeagueWeek(leagueId: string, tournamentId: string) {
+  leagueStore.selectLeague(leagueId);
+  const tournament = store.tournaments.find((item) => item.id === tournamentId);
+  if (tournament) {
+    store.selectTournament(tournamentId);
+    ui.goTournament();
+    return;
+  }
+  const teamTournament = teamStore.items.find((item) => item.id === tournamentId);
+  if (teamTournament) {
+    teamStore.select(tournamentId);
+    goTeamTournament();
+    return;
+  }
+  ui.goLeagueDetail();
+}
+
+function leagueWeeks(league: (typeof leagueStore.leagues)[number]) {
+  return league.season.stages.flatMap((stage) => stage.weeks.map((week) => ({
+    ...week,
+    stageName: stage.name,
+    tournament: store.tournaments.find((item) => item.id === week.tournamentId)
+      ?? teamStore.items.find((item) => item.id === week.tournamentId),
+  })));
+}
+
 function removeLeague(id: string, lName: string) {
   if (confirm(`لیگ «${lName}» و تمام اطلاعات آن حذف شود؟`)) leagueStore.deleteLeague(id);
 }
 
 const totalTournaments = computed(() => rows.value.length);
-const totalTeamTournaments = computed(() => teamStore.items.length);
+const totalTeamTournaments = computed(() => teamStore.items.filter((item) => !item.leagueId).length);
 const totalLeagues = computed(() => leagueStore.leagues.length + poomsaeLeagues.value.length);
 const visibleLeagueCount = computed(() => leagueFilter.value === 'kyorugi' ? leagueStore.leagues.length : leagueFilter.value === 'poomsae' ? poomsaeLeagues.value.length : totalLeagues.value);
 </script>
@@ -927,14 +956,16 @@ const visibleLeagueCount = computed(() => leagueFilter.value === 'kyorugi' ? lea
         <p class="text-lg text-slate-500">{{ totalLeagues ? 'در این بخش لیگی پیدا نشد' : 'هنوز لیگی ایجاد نشده است' }}</p>
       </div>
 
-      <div v-else class="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+      <div v-else class="space-y-5">
         <div
             v-for="l in leagueFilter==='poomsae'?[]:leagueStore.leagues"
             :key="l.id"
-            class="group relative overflow-hidden rounded-3xl border border-slate-200 bg-white p-5 shadow-sm transition duration-300 hover:-translate-y-1 hover:border-amber-300 hover:shadow-xl"
+            class="group relative overflow-hidden rounded-3xl border border-slate-200 bg-white p-5 shadow-sm transition hover:border-blue-300 hover:shadow-lg sm:p-6"
         >
-          <div class="absolute inset-x-0 top-0 h-1 bg-gradient-to-l from-amber-500 to-orange-300"></div>
-          <span class="mb-4 inline-flex rounded-full bg-amber-100 px-2.5 py-1 text-xs font-bold text-amber-800">کیورگی</span>
+          <div class="absolute inset-y-0 right-0 w-1 bg-blue-600"></div>
+          <div class="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.3fr)] lg:gap-8">
+          <div class="min-w-0">
+          <span class="mb-4 inline-flex rounded-full bg-blue-50 px-2.5 py-1 text-xs font-bold text-blue-700">کیورگی</span>
           <span
               :class="[
               'mb-4 inline-flex rounded-full px-2.5 py-1 text-xs font-medium',
@@ -958,24 +989,49 @@ const visibleLeagueCount = computed(() => leagueFilter.value === 'kyorugi' ? lea
           </div>
 
           <div class="grid grid-cols-2 gap-2 text-sm">
-            <div class="col-span-2 rounded-xl bg-amber-50 p-3"><div class="text-[10px] text-amber-600">فصل جاری</div><div class="mt-1 font-bold text-amber-900">{{ l.season.name }}</div></div>
+            <div class="col-span-2 rounded-xl bg-blue-50 p-3"><div class="text-xs text-blue-600">فصل جاری</div><div class="mt-1 font-bold text-blue-900">{{ l.season.name }}</div></div>
             <div class="rounded-xl bg-slate-50 p-3"><div class="text-[10px] text-slate-400">ساختار</div><div class="mt-1 font-bold text-slate-700">{{ l.season.stages.length }} مرحله</div></div>
             <div class="rounded-xl bg-slate-50 p-3"><div class="text-[10px] text-slate-400">رده</div><div class="mt-1 truncate font-bold text-slate-700">{{ GENDER_LABELS[l.gender] }} · {{ l.ageCategory }}</div></div>
           </div>
 
           <button
               @click="openLeague(l.id)"
-              class="mt-4 w-full rounded-xl bg-slate-900 py-2.5 text-sm font-bold text-white transition hover:bg-amber-600"
+              class="mt-4 w-full rounded-xl bg-slate-900 py-2.5 text-sm font-bold text-white transition hover:bg-blue-700 sm:w-auto sm:px-6"
           >
             مدیریت لیگ
           </button>
+          </div>
+          <div class="min-w-0 border-t border-slate-100 pt-5 lg:border-r lg:border-t-0 lg:py-1 lg:pr-7">
+            <div class="mb-3 flex items-center justify-between gap-3">
+              <div><h4 class="font-black text-slate-900">هفته‌های لیگ</h4><p class="mt-1 text-xs text-slate-500">ورود مستقیم به مسابقهٔ هر هفته</p></div>
+              <span class="rounded-full bg-slate-100 px-3 py-1 text-xs font-bold text-slate-600">{{ toPersianDigits(leagueWeeks(l).filter(w => w.tournamentId).length) }} / {{ toPersianDigits(leagueWeeks(l).length) }}</span>
+            </div>
+            <div class="grid max-h-72 gap-2 overflow-y-auto pr-1 sm:grid-cols-2">
+              <button v-for="week in leagueWeeks(l)" :key="week.id" type="button"
+                      class="flex min-w-0 items-center justify-between gap-3 rounded-xl border px-3 py-3 text-right transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-600"
+                      :class="week.tournamentId ? 'border-blue-100 bg-blue-50/60 hover:border-blue-400 hover:bg-blue-50' : 'border-slate-200 bg-slate-50 hover:border-slate-400'"
+                      @click="week.tournamentId ? openLeagueWeek(l.id, week.tournamentId) : openLeague(l.id)">
+                <span class="min-w-0"><span class="block truncate text-sm font-bold text-slate-900">{{ week.name }}</span><span class="mt-1 block truncate text-xs text-slate-500">{{ week.tournament?.name || week.stageName }}</span></span>
+                <span class="shrink-0 text-xs font-bold" :class="week.tournamentId ? 'text-blue-700' : 'text-slate-500'">{{ week.tournamentId ? 'ورود ←' : 'آماده‌سازی ←' }}</span>
+              </button>
+            </div>
+          </div>
+          </div>
         </div>
-        <article v-for="l in leagueFilter==='kyorugi'?[]:poomsaeLeagues" :key="l.id" class="group relative overflow-hidden rounded-3xl border border-slate-200 bg-white p-5 shadow-sm transition duration-300 hover:-translate-y-1 hover:border-teal-300 hover:shadow-xl">
-          <div class="absolute inset-x-0 top-0 h-1 bg-gradient-to-l from-teal-700 to-cyan-400"></div>
-          <span class="mb-4 inline-flex rounded-full bg-teal-100 px-2.5 py-1 text-xs font-bold text-teal-800">پومسه</span>
-          <h3 class="mb-4 border-b border-slate-100 pb-4 text-lg font-black leading-7 text-slate-900">{{ l.name }}</h3>
-          <div class="grid grid-cols-2 gap-2 text-sm"><div class="col-span-2 rounded-xl bg-teal-50 p-3"><div class="text-[10px] text-teal-700">فصل جاری</div><div class="mt-1 font-bold text-teal-950">{{ l.seasonName }}</div></div><div class="rounded-xl bg-slate-50 p-3"><div class="text-[10px] text-slate-400">ساختار</div><div class="mt-1 font-bold text-slate-700">{{ new Set(l.weeks.map(w=>w.stage)).size }} مرحله</div></div><div class="rounded-xl bg-slate-50 p-3"><div class="text-[10px] text-slate-400">مسابقات هفته‌ها</div><div class="mt-1 font-bold text-slate-700">{{ l.weeks.filter(w=>w.eventId).length }} از {{ l.weeks.length }}</div></div></div>
-          <button class="mt-4 w-full rounded-xl bg-slate-900 py-2.5 text-sm font-bold text-white transition hover:bg-teal-700" @click="ui.goPoomsaeLeague(l.id)">مدیریت لیگ</button>
+        <article v-for="l in leagueFilter==='kyorugi'?[]:poomsaeLeagues" :key="l.id" class="group relative overflow-hidden rounded-3xl border border-slate-200 bg-white p-5 shadow-sm transition hover:border-teal-300 hover:shadow-lg sm:p-6">
+          <div class="absolute inset-y-0 right-0 w-1 bg-teal-600"></div>
+          <div class="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.3fr)] lg:gap-8">
+            <div class="min-w-0">
+              <span class="mb-4 inline-flex rounded-full bg-teal-100 px-2.5 py-1 text-xs font-bold text-teal-800">پومسه</span>
+              <h3 class="mb-4 border-b border-slate-100 pb-4 text-lg font-black leading-7 text-slate-900">{{ l.name }}</h3>
+              <div class="grid grid-cols-2 gap-2 text-sm"><div class="col-span-2 rounded-xl bg-teal-50 p-3"><div class="text-xs text-teal-700">فصل جاری</div><div class="mt-1 font-bold text-teal-950">{{ l.seasonName }}</div></div><div class="rounded-xl bg-slate-50 p-3"><div class="text-xs text-slate-500">ساختار</div><div class="mt-1 font-bold text-slate-700">{{ new Set(l.weeks.map(w=>w.stage)).size }} مرحله</div></div><div class="rounded-xl bg-slate-50 p-3"><div class="text-xs text-slate-500">مسابقات هفته‌ها</div><div class="mt-1 font-bold text-slate-700">{{ l.weeks.filter(w=>w.eventId).length }} از {{ l.weeks.length }}</div></div></div>
+              <button class="mt-4 w-full rounded-xl bg-slate-900 py-2.5 text-sm font-bold text-white transition hover:bg-teal-700 sm:w-auto sm:px-6" @click="ui.goPoomsaeLeague(l.id)">مدیریت لیگ</button>
+            </div>
+            <div class="min-w-0 border-t border-slate-100 pt-5 lg:border-r lg:border-t-0 lg:py-1 lg:pr-7">
+              <div class="mb-3 flex items-center justify-between gap-3"><div><h4 class="font-black text-slate-900">هفته‌های لیگ</h4><p class="mt-1 text-xs text-slate-500">مشاهده و مدیریت هر هفته</p></div><span class="rounded-full bg-slate-100 px-3 py-1 text-xs font-bold text-slate-600">{{ toPersianDigits(l.weeks.filter(w => w.eventId).length) }} / {{ toPersianDigits(l.weeks.length) }}</span></div>
+              <div class="grid max-h-72 gap-2 overflow-y-auto pr-1 sm:grid-cols-2"><button v-for="week in l.weeks" :key="week.id" type="button" class="flex items-center justify-between gap-3 rounded-xl border border-teal-100 bg-teal-50/50 px-3 py-3 text-right transition hover:border-teal-400 focus-visible:outline focus-visible:outline-2 focus-visible:outline-teal-600" @click="ui.goPoomsaeLeague(l.id); ui.poomsaeLeagueTab='weeks'"><span><span class="block text-sm font-bold text-slate-900">{{ week.name || `هفتهٔ ${toPersianDigits(week.position || 1)}` }}</span><span class="mt-1 block text-xs text-slate-500">مرحلهٔ {{ toPersianDigits(week.stage) }}</span></span><span class="shrink-0 text-xs font-bold text-teal-700">{{ week.eventId ? 'مشاهده ←' : 'آماده‌سازی ←' }}</span></button></div>
+            </div>
+          </div>
         </article>
       </div>
     </div>

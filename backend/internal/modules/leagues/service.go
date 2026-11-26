@@ -515,7 +515,7 @@ func (s *Service) UpdateAthlete(ctx context.Context, leagueID, athleteID string,
 	}
 	if locked {
 		var unchanged bool
-		if err := s.db.QueryRow(ctx, `SELECT team_id IS NOT DISTINCT FROM $3::uuid AND (group_id IS NOT DISTINCT FROM $4::uuid OR (team_id IS NULL AND group_id IS NULL AND $4::uuid IS NOT NULL)) AND weight_category=$5 AND ranking IS NOT DISTINCT FROM $6::int AND active=$7 FROM league_athletes WHERE id=$1 AND league_id=$2`, athleteID, leagueID, in.TeamID, in.GroupID, in.WeightCategory, in.Ranking, in.Active).Scan(&unchanged); err != nil {
+		if err := s.db.QueryRow(ctx, `SELECT team_id IS NOT DISTINCT FROM $3::uuid AND (group_id IS NOT DISTINCT FROM $4::uuid OR (team_id IS NULL AND group_id IS NULL AND $4::uuid IS NOT NULL)) AND ranking IS NOT DISTINCT FROM $5::int AND active=$6 FROM league_athletes WHERE id=$1 AND league_id=$2`, athleteID, leagueID, in.TeamID, in.GroupID, in.Ranking, in.Active).Scan(&unchanged); err != nil {
 			return nil, err
 		}
 		if !unchanged {
@@ -543,11 +543,7 @@ func (s *Service) UpdateAthlete(ctx context.Context, leagueID, athleteID string,
 	if tag.RowsAffected() == 0 {
 		return nil, ErrNotFound
 	}
-	// Refresh the displayed coach in tournament snapshots as well.
-	if _, err = s.db.Exec(ctx, `UPDATE tournaments SET revision=revision+1,updated_at=now() WHERE league_id=$1`, leagueID); err != nil {
-		return nil, err
-	}
-	if _, err = s.db.Exec(ctx, `UPDATE tournament_entries e SET data=jsonb_set(e.data,'{coach}',to_jsonb($3::text)) FROM tournaments t WHERE t.id=e.tournament_id AND t.league_id=$1 AND e.athlete_id=$2`, leagueID, athleteID, strings.TrimSpace(in.CoachName)); err != nil {
+	if err = s.syncAthleteEntries(ctx, leagueID, athleteID, club, strings.TrimSpace(in.CoachName), in.WeightCategory, in.Ranking, ""); err != nil {
 		return nil, err
 	}
 	l, err := s.Get(ctx, leagueID)
@@ -560,6 +556,81 @@ func (s *Service) UpdateAthlete(ctx context.Context, leagueID, athleteID string,
 		}
 	}
 	return nil, ErrNotFound
+}
+
+// SyncTournamentAthlete persists a linked tournament edit in the league and all
+// other tournament entries. The caller's transaction makes the operation atomic.
+func (s *Service) SyncTournamentAthlete(ctx context.Context, leagueID, athleteID string, in tournaments.UpdateAthleteInput) error {
+	var teamID *string
+	var club string
+	err := s.db.QueryRow(ctx, `SELECT team_id::text,club_name FROM league_athletes WHERE id=$1 AND league_id=$2`, athleteID, leagueID).Scan(&teamID, &club)
+	if err != nil {
+		return err
+	}
+	if teamID == nil && strings.TrimSpace(in.Coach) == "" {
+		return fmt.Errorf("%w: نام مربی برای بازیکن آزاد الزامی است", ErrInvalid)
+	}
+	if club != strings.TrimSpace(in.Club) {
+		return ErrStructureLocked
+	}
+	_, err = s.db.Exec(ctx, `UPDATE league_athletes SET coach_name=$3,weight_category=$4,ranking=$5,updated_at=now() WHERE id=$1 AND league_id=$2`, athleteID, leagueID, strings.TrimSpace(in.Coach), in.WeightCategory, in.Ranking)
+	if err != nil {
+		return err
+	}
+	var profileID string
+	if err = s.db.QueryRow(ctx, `SELECT profile_id::text FROM league_athletes WHERE id=$1 AND league_id=$2`, athleteID, leagueID).Scan(&profileID); err != nil {
+		return err
+	}
+	if _, err = s.db.Exec(ctx, `UPDATE athletes SET name=$2,updated_at=now() WHERE id=$1 AND organization_id=$3`, profileID, strings.TrimSpace(in.Name), s.organizationID); err != nil {
+		return err
+	}
+	return s.syncAthleteEntries(ctx, leagueID, athleteID, club, strings.TrimSpace(in.Coach), in.WeightCategory, in.Ranking, "")
+}
+
+func (s *Service) syncAthleteEntries(ctx context.Context, leagueID, athleteID, club, coach, weight string, ranking *int, skipTournament string) error {
+	rows, err := s.db.Query(ctx, `SELECT e.tournament_id::text,e.athlete_id::text FROM tournament_entries e JOIN tournaments t ON t.id=e.tournament_id WHERE t.league_id=$1 AND e.athlete_id=$2`, leagueID, athleteID)
+	if err != nil {
+		return err
+	}
+	type entry struct{ tournamentID, athleteID string }
+	entries := []entry{}
+	for rows.Next() {
+		var e entry
+		if err = rows.Scan(&e.tournamentID, &e.athleteID); err != nil {
+			rows.Close()
+			return err
+		}
+		entries = append(entries, e)
+	}
+	err = rows.Err()
+	rows.Close()
+	if err != nil {
+		return err
+	}
+	ts := tournaments.NewTournamentService(tournaments.NewTournamentRepository(s.db, s.organizationID))
+	for _, e := range entries {
+		if e.tournamentID == skipTournament {
+			continue
+		}
+		t, getErr := ts.GetByID(ctx, e.tournamentID)
+		if getErr != nil {
+			return getErr
+		}
+		for _, a := range t.Athletes {
+			if a.ID == e.athleteID {
+				var name string
+				if err = s.db.QueryRow(ctx, `SELECT a.name FROM league_athletes la JOIN athletes a ON a.id=la.profile_id WHERE la.id=$1`, athleteID).Scan(&name); err != nil {
+					return err
+				}
+				_, err = ts.UpdateAthlete(ctx, e.tournamentID, e.athleteID, tournaments.UpdateAthleteInput{Name: name, Club: club, Coach: coach, WeightCategory: weight, Ranking: ranking})
+				if err != nil {
+					return err
+				}
+				break
+			}
+		}
+	}
+	return nil
 }
 
 func (s *Service) RemoveAthlete(ctx context.Context, leagueID, athleteID string) error {
