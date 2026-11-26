@@ -1144,7 +1144,9 @@ func (s *tournamentService) UpdateAthlete(
 	if current.WeightCategory != weightCategory && bracketExistsForCategory(tournament.Matches, weightCategory) {
 		return nil, ErrAthleteLocked
 	}
-	if current.WeightCategory != weightCategory &&
+	changingWeight := current.WeightCategory != weightCategory
+	failedWeighInCorrection := changingWeight && current.WeighIn != nil && current.WeighIn.Status == WeighInFailed
+	if changingWeight && !failedWeighInCorrection &&
 		current.WeighIn != nil &&
 		(current.WeighIn.Status != WeighInPending ||
 			len(current.WeighIn.Attempts) > 0) {
@@ -1162,8 +1164,14 @@ func (s *tournamentService) UpdateAthlete(
 		)
 	}
 
-	if current.ProfileID != nil && (current.Name != strings.TrimSpace(input.Name) || current.Club != strings.TrimSpace(input.Club) || current.Coach != strings.TrimSpace(input.Coach)) {
-		return nil, fmt.Errorf("%w: linked identity snapshot cannot be overwritten", ErrAthleteLocked)
+	if failedWeighInCorrection {
+		current.WeighInCorrections = append(current.WeighInCorrections, WeighInCorrection{
+			PreviousCategory: current.WeightCategory,
+			PreviousWeighIn:  *current.WeighIn,
+			ChangedAt:        time.Now().UTC(),
+		})
+		current.WeighIn = newPendingWeighIn()
+		current.WeighedIn = false
 	}
 	current.Coach = strings.TrimSpace(input.Coach)
 	current.Name = strings.TrimSpace(input.Name)

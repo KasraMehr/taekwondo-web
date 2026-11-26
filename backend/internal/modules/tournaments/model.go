@@ -175,16 +175,25 @@ type Tournament struct {
 }
 
 type TournamentAthlete struct {
-	ProfileID      *string  `json:"profileId,omitempty"`
-	Coach          string   `json:"coach,omitempty"`
-	ID             string   `json:"id"`
-	Number         int      `json:"number,omitempty"`
-	Name           string   `json:"name"`
-	Club           string   `json:"club"`
-	WeightCategory string   `json:"weightCategory"`
-	Ranking        *int     `json:"ranking,omitempty"`
-	WeighedIn      bool     `json:"weighedIn"`
-	WeighIn        *WeighIn `json:"weighIn,omitempty"`
+	ProfileID          *string             `json:"profileId,omitempty"`
+	Coach              string              `json:"coach,omitempty"`
+	ID                 string              `json:"id"`
+	Number             int                 `json:"number,omitempty"`
+	Name               string              `json:"name"`
+	Club               string              `json:"club"`
+	WeightCategory     string              `json:"weightCategory"`
+	Ranking            *int                `json:"ranking,omitempty"`
+	WeighedIn          bool                `json:"weighedIn"`
+	WeighIn            *WeighIn            `json:"weighIn,omitempty"`
+	WeighInCorrections []WeighInCorrection `json:"weighInCorrections,omitempty"`
+}
+
+// WeighInCorrection preserves the rejected weigh-in when an athlete moves to
+// another category before joining a bracket.
+type WeighInCorrection struct {
+	PreviousCategory string    `json:"previousCategory"`
+	PreviousWeighIn  WeighIn   `json:"previousWeighIn"`
+	ChangedAt        time.Time `json:"changedAt"`
 }
 
 type Match struct {

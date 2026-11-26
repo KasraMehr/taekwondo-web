@@ -398,7 +398,17 @@ func (a *API) profileRoutes(org *gin.RouterGroup) {
 				if r.Role == "coach" || r.Role == "athlete" {
 					in.UserID = existingUser
 				}
-				return oneJSON(r, `UPDATE athletes a SET name=$3,national_code=$4,birth_date=$5,gender=$6,phone=$7,email=$8,club_id=$9,user_id=$10,photo_data=COALESCE($11,photo_data),updated_at=now() WHERE id=$1 AND organization_id=$2 RETURNING `+profileJSON, r.C.Param("athlete"), r.OrganizationID, strings.TrimSpace(in.Name), in.NationalCode, in.BirthDate, in.Gender, in.Phone, in.Email, in.ClubID, in.UserID, in.PhotoData)
+				result, err := oneJSON(r, `UPDATE athletes a SET name=$3,national_code=$4,birth_date=$5,gender=$6,phone=$7,email=$8,club_id=$9,user_id=$10,photo_data=COALESCE($11,photo_data),updated_at=now() WHERE id=$1 AND organization_id=$2 RETURNING `+profileJSON, r.C.Param("athlete"), r.OrganizationID, strings.TrimSpace(in.Name), in.NationalCode, in.BirthDate, in.Gender, in.Phone, in.Email, in.ClubID, in.UserID, in.PhotoData)
+				if err != nil {
+					return nil, err
+				}
+				if _, err = r.Tx.Exec(r.Context(), `UPDATE tournament_entries e SET data=jsonb_set(e.data,'{name}',to_jsonb($2::text)) FROM tournaments t WHERE t.id=e.tournament_id AND t.organization_id=$3 AND e.profile_id=$1`, r.C.Param("athlete"), strings.TrimSpace(in.Name), r.OrganizationID); err != nil {
+					return nil, err
+				}
+				if _, err = r.Tx.Exec(r.Context(), `UPDATE tournaments t SET revision=revision+1,updated_at=now() WHERE t.organization_id=$2 AND EXISTS(SELECT 1 FROM tournament_entries e WHERE e.tournament_id=t.id AND e.profile_id=$1)`, r.C.Param("athlete"), r.OrganizationID); err != nil {
+					return nil, err
+				}
+				return result, nil
 			}
 			if r.Role == "coach" && in.UserID != nil {
 				return nil, bad("only an organizer can link another account")

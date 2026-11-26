@@ -115,7 +115,25 @@ func (a *API) tournamentRoutes(org *gin.RouterGroup) {
 		return r.Service().AddAthlete(r.Context(), r.C.Param("tournament"), in)
 	}))
 	group.PUT("/:tournament/athletes/:entry", tournamentBody(a, permAthletesManage, func(r *Request, in tournaments.UpdateAthleteInput) (any, error) {
-		return r.Service().UpdateAthlete(r.Context(), r.C.Param("tournament"), r.C.Param("entry"), in)
+		updated, err := r.Service().UpdateAthlete(r.Context(), r.C.Param("tournament"), r.C.Param("entry"), in)
+		if err != nil {
+			return nil, err
+		}
+		t, err := r.Service().GetByID(r.Context(), r.C.Param("tournament"))
+		if err != nil {
+			return nil, err
+		}
+		if t.LeagueID != nil && updated.ProfileID != nil {
+			var leagueAthleteID string
+			err = r.Tx.QueryRow(r.Context(), `SELECT id::text FROM league_athletes WHERE league_id=$1 AND profile_id=$2`, *t.LeagueID, *updated.ProfileID).Scan(&leagueAthleteID)
+			if err != nil {
+				return nil, err
+			}
+			if err = r.LeagueService().SyncTournamentAthlete(r.Context(), *t.LeagueID, leagueAthleteID, in); err != nil {
+				return nil, err
+			}
+		}
+		return updated, nil
 	}))
 	group.DELETE("/:tournament/athletes/:entry", a.route(true, true, func(r *Request) (any, error) {
 		if err := r.authorizeTournament(permAthletesManage, r.C.Param("tournament")); err != nil {

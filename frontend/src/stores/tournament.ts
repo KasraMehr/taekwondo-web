@@ -231,22 +231,23 @@ export const useTournamentStore = defineStore("tournament", () => {
         if (athlete.ranking != null && (!Number.isInteger(athlete.ranking) || athlete.ranking <= 0))
             return { error: 'رنک باید عدد صحیح مثبت باشد' }
         const previous = t.athletes[idx]
+        const failedWeighInCorrection = previous.weightCategory !== athlete.weightCategory && previous.weighIn?.status === 'failed'
         if (previous.weightCategory !== athlete.weightCategory &&
-            ((previous.weighIn?.attempts.length ?? 0) > 0 ||
-             previous.weighIn?.status === 'passed' || previous.weighIn?.status === 'failed' ||
+            ((!failedWeighInCorrection && ((previous.weighIn?.attempts.length ?? 0) > 0 || previous.weighIn?.status === 'passed')) ||
              t.matches.some(m => m.athlete1Id === athlete.id || m.athlete2Id === athlete.id || m.weightCategory === athlete.weightCategory)))
-            return { error: 'پس از وزن‌کشی یا قرعه‌کشی تغییر وزن مجاز نیست' }
+            return { error: 'این ورزشکار در جدول حضور دارد یا قرعهٔ وزن مقصد انجام شده است' }
         if (idx !== -1) {
             t.athletes[idx] = {
                 ...athlete,
                 number: previous.number,
                 // وزن‌کشی از فرم ویرایش دست‌کاری نمی‌شود؛ فقط از متدهای اختصاصی
-                weighIn: t.athletes[idx].weighIn ?? athlete.weighIn ?? emptyWeighIn(),
+                weighIn: failedWeighInCorrection ? emptyWeighIn() : (t.athletes[idx].weighIn ?? athlete.weighIn ?? emptyWeighIn()),
+                weighedIn: failedWeighInCorrection ? false : previous.weighedIn,
             }
         }
         save()
         remote(() => webApi().call(`/tournaments/${tournamentId}/athletes/${athlete.id}`, 'PUT', {
-            name: athlete.name, club: athlete.club, weightCategory: athlete.weightCategory,
+            name: athlete.name, club: athlete.club, coach: athlete.coach ?? '', weightCategory: athlete.weightCategory,
             ranking: athlete.ranking ?? null,
         }), tournamentId)
         return {}
