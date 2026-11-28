@@ -493,6 +493,9 @@ func (s *Service) AddAthlete(ctx context.Context, leagueID string, in AddAthlete
 	if err != nil {
 		return nil, err
 	}
+	if err = s.attachNewAthleteToLeagueTournaments(ctx, leagueID, id, in.ProfileID, name, club, strings.TrimSpace(in.CoachName), strings.TrimSpace(in.WeightCategory), in.Ranking, in.GroupID, in.TeamID); err != nil {
+		return nil, err
+	}
 	l, err := s.Get(ctx, leagueID)
 	if err != nil {
 		return nil, err
@@ -503,6 +506,45 @@ func (s *Service) AddAthlete(ctx context.Context, leagueID string, in AddAthlete
 		}
 	}
 	return nil, ErrNotFound
+}
+
+// New team members join weeks whose competition day has not started. Existing
+// matches, draw positions, numbers and results are never changed here.
+func (s *Service) attachNewAthleteToLeagueTournaments(ctx context.Context, leagueID, athleteID, profileID, name, club, coach, weight string, ranking *int, groupID, teamID *string) error {
+	rows, err := s.db.Query(ctx, `SELECT t.id::text FROM tournaments t LEFT JOIN league_teams lt ON lt.id=$3::uuid WHERE t.league_id=$1 AND t.organization_id=$4 AND (t.group_id IS NULL OR t.group_id IS NOT DISTINCT FROM COALESCE($2::uuid,lt.group_id)) ORDER BY t.created_at`, leagueID, groupID, teamID, s.organizationID)
+	if err != nil {
+		return err
+	}
+	ids := []string{}
+	for rows.Next() {
+		var id string
+		if err = rows.Scan(&id); err != nil {
+			rows.Close()
+			return err
+		}
+		ids = append(ids, id)
+	}
+	err = rows.Err()
+	rows.Close()
+	if err != nil {
+		return err
+	}
+	ts := tournaments.NewTournamentService(tournaments.NewTournamentRepository(s.db, s.organizationID))
+	for _, tournamentID := range ids {
+		pid := profileID
+		_, addErr := ts.AddAthlete(ctx, tournamentID, tournaments.AddAthleteInput{ID: athleteID, ProfileID: &pid, Name: name, Club: club, Coach: coach, WeightCategory: weight, Ranking: ranking})
+		if errors.Is(addErr, tournaments.ErrAthleteLocked) {
+			continue
+		}
+		if addErr != nil {
+			return addErr
+		}
+		// The league team, not the global profile club, defines affiliation.
+		if _, err = s.db.Exec(ctx, `UPDATE tournament_entries SET data=jsonb_set(jsonb_set(data,'{club}',to_jsonb($3::text)),'{coach}',to_jsonb($4::text)) WHERE tournament_id=$1 AND athlete_id=$2`, tournamentID, athleteID, club, coach); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (s *Service) UpdateAthlete(ctx context.Context, leagueID, athleteID string, in UpdateAthleteInput) (*Athlete, error) {

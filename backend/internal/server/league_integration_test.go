@@ -33,6 +33,17 @@ func TestPostgresLeagueRosterCreatesTournamentSnapshot(t *testing.T) {
 	path := base + "/tournaments/" + event.ID + "/athletes/" + event.Athletes[0].ID + "/weigh-in"
 	requestJSON(t, router, http.MethodPost, path, token, map[string]any{"weightKg": 54.2}, 200)
 	requestJSON(t, router, http.MethodPost, base+"/leagues/"+league.ID+"/tournaments/"+event.ID+"/sync-roster", token, nil, 409)
+	late := decode[leagues.Athlete](t, requestJSON(t, router, http.MethodPost, base+"/leagues/"+league.ID+"/athletes", token, map[string]any{"name": "Late teammate", "gender": "male", "clubId": club["id"], "teamId": league.Teams[0].ID, "groupId": league.Groups[0].ID, "weightCategory": "-58"}, 200))
+	event = decode[tournaments.Tournament](t, requestJSON(t, router, http.MethodGet, base+"/tournaments/"+event.ID, token, nil, 200))
+	found := false
+	for _, entry := range event.Athletes {
+		if entry.ID == late.ID && entry.WeightCategory == "-58" && entry.Club == "Club One" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("late league teammate was not attached to the existing week: %#v", event.Athletes)
+	}
 }
 
 func TestPostgresLeagueStandingsRefreshAfterEachTournamentResult(t *testing.T) {
