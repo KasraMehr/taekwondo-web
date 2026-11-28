@@ -168,6 +168,23 @@ test('store rejects a weight-category edit after a weigh-in', () => {
   assert.ok(store.updateAthlete(tournament.id, { ...a, weightCategory: '-58' }).error)
   assert.equal(tournament.athletes[0].weightCategory, '-54')
 })
+test('store registers and weighs in a late entrant without changing an active bracket', () => {
+  const { store, tournament } = storeFixture()
+  for (let i = 0; i < 4; i++) {
+    store.addAthlete(tournament.id, { name: `A ${i}`, club: '', weightCategory: '-54' })
+    store.recordWeighIn(tournament.id, tournament.athletes[i].id, 54)
+  }
+  store.drawBracket(tournament.id, 'ranked')
+  store.startMatch(tournament.id, tournament.matches.find(m => m.round === 1)!.id)
+  const before = JSON.stringify(tournament.matches)
+  assert.deepEqual(store.addAthlete(tournament.id, { name: 'Late entrant', club: '', weightCategory: '-54' }), {})
+  const late = tournament.athletes[tournament.athletes.length - 1]
+  assert.equal(tournament.athletes.length, 5)
+  assert.equal(store.recordWeighIn(tournament.id, late.id, 54).error, undefined)
+  assert.equal(JSON.stringify(tournament.matches), before)
+  assert.ok(!tournament.matches.some(m => m.athlete1Id === late.id || m.athlete2Id === late.id))
+})
+
 test('store prevents deleting a bracket participant', () => {
   const { store, tournament } = storeFixture()
   for (let i = 0; i < 2; i++) {

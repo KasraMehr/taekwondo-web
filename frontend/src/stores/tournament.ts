@@ -186,8 +186,6 @@ export const useTournamentStore = defineStore("tournament", () => {
             return { error: 'نام یا دسته وزنی نامعتبر است' }
         if (athlete.ranking != null && (!Number.isInteger(athlete.ranking) || athlete.ranking <= 0))
             return { error: 'رنک باید عدد صحیح مثبت باشد' }
-        if (t.matches.some(m => m.weightCategory === athlete.weightCategory))
-            return { error: 'ابتدا براکت این وزن را پاک کنید' }
 
         if (athlete.ranking != null) {
             const duplicate = t.athletes.find(
