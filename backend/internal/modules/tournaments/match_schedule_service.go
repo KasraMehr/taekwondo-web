@@ -731,12 +731,25 @@ func (s *tournamentService) PlaceAthlete(ctx context.Context, tournamentID, matc
 	if athleteIsReferencedByMatches(tournament.Matches, athlete.ID) {
 		return nil, fmt.Errorf("%w: athlete is already in the draw", ErrDuplicateAthlete)
 	}
-	for i := range tournament.Matches {
-		m := &tournament.Matches[i]
-		if m.WeightCategory == match.WeightCategory && !lifecycleIsBye(m) &&
-			(lifecycleHasResult(m) || lifecycleMatchStatus(m) != MatchStatusPending) {
-			return nil, fmt.Errorf("%w: category has started or contains results", ErrMatchLocked)
+	// Only this branch is affected. Unrelated matches in the same weight may
+	// already have results, but a started descendant must never be rewritten.
+	visited := map[string]bool{}
+	for current := match; current != nil; {
+		if visited[current.ID] {
+			return nil, ErrInvalidTournamentInput
 		}
+		visited[current.ID] = true
+		if !lifecycleIsBye(current) && (lifecycleHasResult(current) || lifecycleMatchStatus(current) != MatchStatusPending) {
+			return nil, fmt.Errorf("%w: این بازی یا بازی بعدی آن شروع شده یا نتیجه دارد", ErrMatchLocked)
+		}
+		if current.NextMatchID == nil {
+			break
+		}
+		nextIndex, nextErr := lifecycleFindMatchIndex(tournament.Matches, *current.NextMatchID)
+		if nextErr != nil {
+			return nil, nextErr
+		}
+		current = &tournament.Matches[nextIndex]
 	}
 	updated := schedulingCloneMatches(tournament)
 	target := &updated.Matches[index]

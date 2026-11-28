@@ -602,15 +602,23 @@ func TestAddAthleteToSecondDayPreservesFirstDay(t *testing.T) {
 		settings.Schedule.CategoryDays[category] = 1
 	}
 	settings.Schedule.CategoryDays["-58"] = 2
+	settings.Schedule.CategoryDays["-63"] = 2
 	if _, err := s.UpdateSettings(context.Background(), id, settings); err != nil {
 		t.Fatal(err)
 	}
 	enter(t, s, id, "-54", 2)
+	enter(t, s, id, "-58", 2)
+	enter(t, s, id, "-63", 2)
 	if _, err := s.DrawBracketForCategory(context.Background(), id, "-54", "ranking"); err != nil {
 		t.Fatal(err)
 	}
+	for _, category := range []string{"-58", "-63"} {
+		if _, err := s.DrawBracketForCategory(context.Background(), id, category, "ranking"); err != nil {
+			t.Fatal(err)
+		}
+	}
 	for i := range r.value.Matches {
-		if r.value.Matches[i].Day == 1 {
+		if r.value.Matches[i].WeightCategory == "-54" || r.value.Matches[i].WeightCategory == "-63" {
 			status := MatchStatusCompleted
 			r.value.Matches[i].Status = &status
 			r.value.Matches[i].Result = &MatchResult{WinType: WinTypePTF, RecordedAt: time.Now().UTC()}
@@ -623,8 +631,66 @@ func TestAddAthleteToSecondDayPreservesFirstDay(t *testing.T) {
 	if !reflect.DeepEqual(before, r.value.Matches) {
 		t.Fatal("adding a day two athlete changed the completed first day")
 	}
-	if _, err := s.AddAthlete(context.Background(), id, AddAthleteInput{Name: "Late day one entrant", WeightCategory: "-54"}); !errors.Is(err, ErrAthleteLocked) {
-		t.Fatalf("expected first day to remain locked, got %v", err)
+	if _, err := s.AddAthlete(context.Background(), id, AddAthleteInput{Name: "Late day one entrant", WeightCategory: "-54"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.AddAthlete(context.Background(), id, AddAthleteInput{Name: "Late started weight entrant", WeightCategory: "-63"}); err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(before, r.value.Matches) {
+		t.Fatal("late registration changed existing matches")
+	}
+}
+
+func TestLateEntrantPlacementDuringCompetition(t *testing.T) {
+	s, r, id := newFixture(t)
+	enter(t, s, id, "-54", 4)
+	if _, err := s.DrawBracketForCategory(context.Background(), id, "-54", "ranking"); err != nil {
+		t.Fatal(err)
+	}
+	var first, target int
+	for i, m := range r.value.Matches {
+		if m.Round == 1 {
+			first = i
+			break
+		}
+	}
+	for i, m := range r.value.Matches {
+		if m.Round == 1 && i != first {
+			target = i
+			break
+		}
+	}
+	ongoing := MatchStatusOngoing
+	r.value.Matches[first].Status = &ongoing
+	before := r.value.Matches[first]
+	late, err := s.AddAthlete(context.Background(), id, AddAthleteInput{Name: "Late", WeightCategory: "-54"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.RecordWeighIn(context.Background(), id, late.ID, RecordWeighInInput{WeightKg: 53}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.PlaceAthlete(context.Background(), id, before.ID, PlaceAthleteInput{Slot: 1, AthleteID: late.ID}); !errors.Is(err, ErrMatchLocked) {
+		t.Fatalf("started match allowed: %v", err)
+	}
+	if _, err := s.PlaceAthlete(context.Background(), id, r.value.Matches[target].ID, PlaceAthleteInput{Slot: 1, AthleteID: late.ID}); err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(before, r.value.Matches[first]) {
+		t.Fatal("unrelated ongoing match changed")
+	}
+	other, err := s.AddAthlete(context.Background(), id, AddAthleteInput{Name: "Another late", WeightCategory: "-54"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.RecordWeighIn(context.Background(), id, other.ID, RecordWeighInInput{WeightKg: 53}); err != nil {
+		t.Fatal(err)
+	}
+	next := matchByID(t, r.value.Matches, *r.value.Matches[target].NextMatchID)
+	next.Status = &ongoing
+	if _, err := s.PlaceAthlete(context.Background(), id, r.value.Matches[target].ID, PlaceAthleteInput{Slot: 1, AthleteID: other.ID}); !errors.Is(err, ErrMatchLocked) {
+		t.Fatalf("started downstream match allowed: %v", err)
 	}
 }
 
