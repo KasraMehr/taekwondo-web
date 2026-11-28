@@ -1022,18 +1022,8 @@ func (s *tournamentService) AddAthlete(
 		}
 	}
 
-	// A running first day must not prevent registration for an untouched day.
-	// Existing brackets and their numbering remain unchanged; a late athlete in
-	// a drawn category is shown outside the draw for explicit placement.
-	if hasStartedMatchesForDay(tournament, dayForCategory(tournament, weightCategory)) {
-		return nil, ErrAthleteLocked
-	}
-	for _, match := range tournament.Matches {
-		if match.WeightCategory == weightCategory && !lifecycleIsBye(&match) &&
-			(lifecycleHasResult(&match) || lifecycleMatchStatus(&match) != MatchStatusPending) {
-			return nil, ErrAthleteLocked
-		}
-	}
+	// Registration does not alter the draw. Late entrants remain outside it;
+	// PlaceAthlete independently protects started matches and downstream results.
 
 	athlete := TournamentAthlete{
 		ProfileID:      cloneStringPointer(input.ProfileID),

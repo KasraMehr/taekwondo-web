@@ -46,6 +46,43 @@ func TestPostgresLeagueRosterCreatesTournamentSnapshot(t *testing.T) {
 	}
 }
 
+func TestPostgresLateLeagueAthleteJoinsDrawnWeek(t *testing.T) {
+	pool := testutil.Database(t)
+	router := NewRouter(pool)
+	token, org := setupAccount(t, router, pool, "late-drawn-league@example.test")
+	base := "/api/v1/organizations/" + org
+	club := decode[map[string]any](t, requestJSON(t, router, http.MethodPost, base+"/clubs", token, map[string]any{"name": "Drawn Club"}, 200))
+	league := decode[leagues.League](t, requestJSON(t, router, http.MethodPost, base+"/leagues", token, map[string]any{"name": "Drawn week", "gender": "male", "ageCategory": "بزرگسالان", "seasonName": "2026", "stageCount": 1, "weeksPerStage": 1, "groupNames": []string{"A"}}, 200))
+	league = decode[leagues.League](t, requestJSON(t, router, http.MethodPost, base+"/leagues/"+league.ID+"/teams", token, map[string]any{"clubId": club["id"], "groupId": league.Groups[0].ID}, 200))
+	for _, name := range []string{"First", "Second"} {
+		requestJSON(t, router, http.MethodPost, base+"/leagues/"+league.ID+"/athletes", token, map[string]any{"name": name, "gender": "male", "clubId": club["id"], "teamId": league.Teams[0].ID, "groupId": league.Groups[0].ID, "weightCategory": "-58"}, 200)
+	}
+	event := decode[tournaments.Tournament](t, requestJSON(t, router, http.MethodPost, base+"/leagues/"+league.ID+"/tournaments", token, map[string]any{"name": "Week 1", "date": "2026-10-01", "courts": 2, "stageId": league.Stages[0].ID, "weekId": league.Stages[0].Weeks[0].ID, "groupId": league.Groups[0].ID}, 200))
+	path := base + "/tournaments/" + event.ID
+	for _, athlete := range event.Athletes {
+		requestJSON(t, router, http.MethodPost, path+"/athletes/"+athlete.ID+"/weigh-in", token, map[string]any{"weightKg": 57.2}, 200)
+	}
+	event = decode[tournaments.Tournament](t, requestJSON(t, router, http.MethodPost, path+"/draw", token, map[string]any{"type": "ranked", "weightCategory": "-58"}, 200))
+	if len(event.Matches) != 1 {
+		t.Fatalf("expected drawn final: %#v", event.Matches)
+	}
+	requestJSON(t, router, http.MethodPost, path+"/matches/"+event.Matches[0].ID+"/start", token, nil, 200)
+	late := decode[leagues.Athlete](t, requestJSON(t, router, http.MethodPost, base+"/leagues/"+league.ID+"/athletes", token, map[string]any{"name": "Late", "gender": "male", "clubId": club["id"], "teamId": league.Teams[0].ID, "groupId": league.Groups[0].ID, "weightCategory": "-58"}, 200))
+	reloaded := decode[tournaments.Tournament](t, requestJSON(t, router, http.MethodGet, path, token, nil, 200))
+	if len(reloaded.Athletes) != 3 || len(reloaded.Matches) != 1 || reloaded.Matches[0].ID != event.Matches[0].ID {
+		t.Fatalf("late entry changed draw: athletes=%#v matches=%#v", reloaded.Athletes, reloaded.Matches)
+	}
+	found := false
+	for _, athlete := range reloaded.Athletes {
+		if athlete.ID == late.ID && !athlete.WeighedIn {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatal("late league athlete missing from drawn tournament")
+	}
+}
+
 func TestPostgresLeagueStandingsRefreshAfterEachTournamentResult(t *testing.T) {
 	pool := testutil.Database(t)
 	router := NewRouter(pool)
