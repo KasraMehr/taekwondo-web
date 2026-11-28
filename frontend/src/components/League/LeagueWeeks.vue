@@ -184,9 +184,14 @@ async function toggleLockWeek(week: StageWeek) {
   catch (e: any) { alert(e?.message || 'تغییر وضعیت هفته ناموفق بود') }
 }
 
-function openTournament(tournamentId: string) {
-  tournamentStore.selectTournament(tournamentId);
-  ui.goTournament();
+async function openTournament(tournamentId: string) {
+  try {
+    await tournamentStore.refreshFromServer(tournamentId);
+    tournamentStore.selectTournament(tournamentId);
+    ui.goTournament();
+  } catch (e: any) {
+    alert(e?.message || 'بارگذاری مسابقه ناموفق بود');
+  }
 }
 
 async function recalculatePoints() {

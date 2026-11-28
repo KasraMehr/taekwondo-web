@@ -377,8 +377,12 @@ func TestDrawUsesStructuredWeighInAndLocksEntries(t *testing.T) {
 	if len(draw.Matches) != 1 {
 		t.Fatal("legacy flag admitted failed athlete")
 	}
-	if _, err = s.AddAthlete(context.Background(), id, AddAthleteInput{Name: "Late", WeightCategory: "-54"}); !errors.Is(err, ErrAthleteLocked) {
+	late, err := s.AddAthlete(context.Background(), id, AddAthleteInput{Name: "Late", WeightCategory: "-54"})
+	if err != nil {
 		t.Fatal(err)
+	}
+	if athleteIsReferencedByMatches(draw.Matches, late.ID) {
+		t.Fatalf("late athlete should remain outside the pending draw: %v", err)
 	}
 	for _, a := range draw.Athletes {
 		if athleteIsReferencedByMatches(draw.Matches, a.ID) {
@@ -588,6 +592,42 @@ func TestTwoDayCorrectionKeepsCompletedFirstDayIntact(t *testing.T) {
 		t.Fatal("athlete missing from day two bracket")
 	}
 }
+
+func TestAddAthleteToSecondDayPreservesFirstDay(t *testing.T) {
+	s, r, id := newFixture(t)
+	settings := *r.value.Settings
+	settings.Schedule.Days = append(settings.Schedule.Days, EventDay{Day: 2, Date: "2026-10-02", Label: "روز دوم"})
+	settings.Schedule.CategoryDays = map[string]int{}
+	for _, category := range WeightOptions(AgeCategoryBozorgsalan, GenderMale) {
+		settings.Schedule.CategoryDays[category] = 1
+	}
+	settings.Schedule.CategoryDays["-58"] = 2
+	if _, err := s.UpdateSettings(context.Background(), id, settings); err != nil {
+		t.Fatal(err)
+	}
+	enter(t, s, id, "-54", 2)
+	if _, err := s.DrawBracketForCategory(context.Background(), id, "-54", "ranking"); err != nil {
+		t.Fatal(err)
+	}
+	for i := range r.value.Matches {
+		if r.value.Matches[i].Day == 1 {
+			status := MatchStatusCompleted
+			r.value.Matches[i].Status = &status
+			r.value.Matches[i].Result = &MatchResult{WinType: WinTypePTF, RecordedAt: time.Now().UTC()}
+		}
+	}
+	before := append([]Match(nil), r.value.Matches...)
+	if _, err := s.AddAthlete(context.Background(), id, AddAthleteInput{Name: "Day two entrant", WeightCategory: "-58"}); err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(before, r.value.Matches) {
+		t.Fatal("adding a day two athlete changed the completed first day")
+	}
+	if _, err := s.AddAthlete(context.Background(), id, AddAthleteInput{Name: "Late day one entrant", WeightCategory: "-54"}); !errors.Is(err, ErrAthleteLocked) {
+		t.Fatalf("expected first day to remain locked, got %v", err)
+	}
+}
+
 func TestSettingsTwoDaysAndNumberingModes(t *testing.T) {
 	for _, mode := range []string{"single_court", "split_halves", "balanced"} {
 		t.Run(mode, func(t *testing.T) {
