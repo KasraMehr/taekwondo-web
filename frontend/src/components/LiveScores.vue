@@ -23,6 +23,8 @@ watch(()=>props.tournamentId,async id=>{
 onUnmounted(()=>{generation++;clearTimeout(timer);controller?.abort()})
 const cards=computed(()=>Object.entries(scores.value).filter(([,value])=>value.score.rounds[value.score.activeRound]).map(([id,value])=>({...value,id,round:value.score.rounds[value.score.activeRound],totals:roundTotals(value.score.rounds[value.score.activeRound])})))
 
+const cardsByMatch=computed(()=>Object.fromEntries(cards.value.map(card=>[card.id,card])))
+
 const courtPanels=computed(()=>Array.from({length:Math.max(4,props.courts??4)},(_,i)=>{
  const court=i+1
  const entries=cards.value.filter(card=>props.matches?.some(match=>match.id===card.id&&match.court===court&&match.status!=='completed'))
@@ -31,6 +33,7 @@ const courtPanels=computed(()=>Array.from({length:Math.max(4,props.courts??4)},(
 const matchNumber=(id:string)=>{const match=props.matches?.find(m=>m.id===id);return match?Math.max(1,match.matchNumber||match.order):''}
 </script>
 <template>
+  <slot :scores="cardsByMatch" :error="error">
   <section v-if="matches" class="court-board" dir="rtl" aria-label="نتایج زنده زمین‌ها">
 <h2>نتایج لحظه‌ای <span>امتیاز جاری راند</span></h2>
 <div class="court-filters" aria-label="انتخاب زمین"><button :aria-pressed="selectedCourt===0" @click="selectedCourt=0">همه زمین‌ها</button><button v-for="court in Math.max(4,courts??4)" :key="court" :aria-pressed="selectedCourt===court" @click="selectedCourt=court">زمین {{courtLabel(court)}}</button></div>
@@ -43,6 +46,7 @@ const matchNumber=(id:string)=>{const match=props.matches?.find(m=>m.id===id);re
     <p v-if="error" role="alert" class="rounded-lg bg-rose-100 p-3 text-sm text-rose-800">{{error}}</p>
     <div class="grid gap-3 md:grid-cols-2"><article v-for="card in cards" :key="card.id" class="overflow-hidden rounded-2xl border border-slate-200 bg-white text-slate-800"><header class="bg-white p-3 text-center text-sm font-bold">راند {{card.round.number}}</header><div class="grid grid-cols-2" dir="ltr"><div class="bg-blue-50 p-5 text-center text-blue-800"><p>{{names?.get(card.score.blueId)?.name||'آبی'}}</p><strong class="text-4xl">{{card.totals.blue}}</strong></div><div class="bg-rose-50 p-5 text-center text-rose-800"><p>{{names?.get(card.score.redId)?.name||'قرمز'}}</p><strong class="text-4xl">{{card.totals.red}}</strong></div></div><p class="p-2 text-center text-xs text-slate-500">امتیاز جاری است؛ نتیجهٔ نهایی هنوز ثبت نشده.</p></article></div>
   </section>
+  </slot>
 </template>
 
 <style scoped>
